@@ -50,7 +50,11 @@ class _TargetScreenState extends State<TargetScreen> {
     );
 
     await _db.insertOrUpdateTarget(target);
-    if (mounted) Navigator.pop(context);
+    if (!mounted) return;
+    setState(() => _saving = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Target berhasil disimpan')),
+    );
   }
 
   @override
@@ -81,93 +85,89 @@ class _TargetScreenState extends State<TargetScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Target Harian')),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: ConstrainedBox(
-              constraints:
-                  BoxConstraints(minHeight: constraints.maxHeight - 40),
-              child: Center(
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (_existingTarget != null) ...[
-                        _SummaryCard(
-                          calories: _existingTarget!.targetCalories,
-                          duration: _existingTarget!.targetDurationMinutes,
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                      const _FieldLabel('Target Kalori (kcal)'),
-                      _StyledField(
-                        controller: _caloriesController,
-                        focusNode: _caloriesFocus,
-                        icon: Icons.local_fire_department,
-                        iconColor: const Color(0xFFFF8A3D),
-                        unit: 'kcal',
-                        hint: '680',
-                        validator: (value) {
-                          if (value == null || value.isEmpty)
-                            return 'Wajib diisi';
-                          if (double.tryParse(value) == null)
-                            return 'Harus berupa angka';
-                          return null;
-                        },
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight - 40),
+            child: Center(
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_existingTarget != null) ...[
+                      _SummaryCard(
+                        calories: _existingTarget!.targetCalories,
+                        duration: _existingTarget!.targetDurationMinutes,
                       ),
-                      const SizedBox(height: 18),
-                      const _FieldLabel('Target Durasi (menit)'),
-                      _StyledField(
-                        controller: _durationController,
-                        focusNode: _durationFocus,
-                        icon: Icons.timer,
-                        iconColor: const Color(0xFF1B9AAA),
-                        unit: 'menit',
-                        hint: '60',
-                        validator: (value) {
-                          if (value == null || value.isEmpty)
-                            return 'Wajib diisi';
-                          if (int.tryParse(value) == null)
-                            return 'Harus berupa angka';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 28),
-                      FilledButton(
-                        onPressed: _saving ? null : _save,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF2EC4B6),
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                        ),
-                        child: _saving
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                    color: Colors.white, strokeWidth: 2),
-                              )
-                            : const Text('Simpan Target'),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Target berlaku untuk hari ini, $_todayLabel',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            fontSize: 11.5, color: Color(0xFF5B6B69)),
-                      ),
+                      const SizedBox(height: 24),
                     ],
-                  ),
+                    const _FieldLabel('Target Kalori (kcal)'),
+                    _StyledField(
+                      controller: _caloriesController,
+                      focusNode: _caloriesFocus,
+                      icon: Icons.local_fire_department,
+                      iconColor: const Color(0xFFFF8A3D),
+                      unit: 'kcal',
+                      hint: '680',
+                      validator: (value) {
+                        if (value == null || value.isEmpty)
+                          return 'Wajib diisi';
+                        if (double.tryParse(value) == null)
+                          return 'Harus berupa angka';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                    const _FieldLabel('Target Durasi (menit)'),
+                    _StyledField(
+                      controller: _durationController,
+                      focusNode: _durationFocus,
+                      icon: Icons.timer,
+                      iconColor: const Color(0xFF1B9AAA),
+                      unit: 'menit',
+                      hint: '60',
+                      validator: (value) {
+                        if (value == null || value.isEmpty)
+                          return 'Wajib diisi';
+                        if (int.tryParse(value) == null)
+                          return 'Harus berupa angka';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 28),
+                    FilledButton(
+                      onPressed: _saving ? null : _save,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF2EC4B6),
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                      ),
+                      child: _saving
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Text('Simpan Target'),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Target berlaku untuk hari ini, $_todayLabel',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 11.5, color: Color(0xFF5B6B69)),
+                    ),
+                  ],
                 ),
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

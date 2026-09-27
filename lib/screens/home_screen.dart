@@ -4,19 +4,21 @@ import '../db/database_helper.dart';
 import '../models/models.dart';
 import '../utils/activity_style.dart';
 import 'add_activity_screen.dart';
-import 'history_screen.dart';
 import 'live_tracking_screen.dart';
-import 'target_screen.dart';
 
+/// Tab body — no own Scaffold app bar/bottom nav, rendered inside
+/// MainNavigationScreen. Keeps its own nested Scaffold only so its FAB
+/// attaches locally without affecting the other tabs.
 class HomeScreen extends StatefulWidget {
   final int userId;
-  const HomeScreen({super.key, required this.userId});
+  final VoidCallback? onGoToTarget;
+  const HomeScreen({super.key, required this.userId, this.onGoToTarget});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> {
   final _db = DatabaseHelper.instance;
   double _totalCalories = 0;
   DailyTarget? _target;
@@ -27,15 +29,18 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    loadData();
   }
 
-  Future<void> _loadData() async {
+  /// Public so the parent tab bar can trigger a refresh (e.g. after
+  /// switching back to this tab) without needing a full rebuild.
+  Future<void> loadData() async {
     final today = DateTime.now();
     final total = await _db.getTotalCaloriesByDate(widget.userId, today);
     final target = await _db.getTargetByDate(widget.userId, today);
     final activities = await _db.getActivitiesByDate(widget.userId, today);
     final types = await _db.getActivityTypes();
+    if (!mounted) return;
     setState(() {
       _totalCalories = total;
       _target = target;
@@ -84,9 +89,8 @@ class _HomeScreenState extends State<HomeScreen> {
         : 0.0;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Tracking Kesehatan')),
       body: RefreshIndicator(
-        onRefresh: _loadData,
+        onRefresh: loadData,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -100,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       builder: (_) => LiveTrackingScreen(userId: widget.userId),
                     ),
                   );
-                  _loadData();
+                  loadData();
                 },
               ),
               const SizedBox(height: 14),
@@ -164,15 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       style:
                           TextButton.styleFrom(foregroundColor: Colors.white),
                       icon: const Icon(Icons.flag_outlined),
-                      onPressed: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => TargetScreen(userId: widget.userId),
-                          ),
-                        );
-                        _loadData();
-                      },
+                      onPressed: widget.onGoToTarget,
                       label: const Text('Set target hari ini'),
                     ),
                 ],
@@ -200,7 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     title: Text(typeName.isEmpty ? 'Aktivitas' : typeName),
                     subtitle: Text(
-                        '${a.durationMinutes} menit${a.note != null ? ' • ${a.note}' : ''}'),
+                        '${a.durationMinutes} menit${a.note != null ? ' \u2022 ${a.note}' : ''}'),
                     trailing: Text(
                       '${a.caloriesBurned.toStringAsFixed(0)} kcal',
                       style: TextStyle(
@@ -254,39 +250,8 @@ class _HomeScreenState extends State<HomeScreen> {
             context,
             MaterialPageRoute(builder: (_) => target),
           );
-          _loadData();
+          loadData();
         },
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: 0,
-        onDestinationSelected: (index) async {
-          if (index == 0) {
-            _loadData();
-            return;
-          }
-          final target = index == 1
-              ? HistoryScreen(userId: widget.userId)
-              : TargetScreen(userId: widget.userId);
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => target),
-          );
-          _loadData();
-        },
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
-              label: 'Home'),
-          NavigationDestination(
-              icon: Icon(Icons.history_outlined),
-              selectedIcon: Icon(Icons.history),
-              label: 'Riwayat'),
-          NavigationDestination(
-              icon: Icon(Icons.flag_outlined),
-              selectedIcon: Icon(Icons.flag),
-              label: 'Target'),
-        ],
       ),
     );
   }

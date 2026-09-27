@@ -4,6 +4,7 @@ import '../db/database_helper.dart';
 import '../models/models.dart';
 import '../utils/activity_style.dart';
 
+/// Tab body — no own Scaffold/AppBar, rendered inside MainNavigationScreen.
 class HistoryScreen extends StatefulWidget {
   final int userId;
   const HistoryScreen({super.key, required this.userId});
@@ -41,51 +42,48 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) {
     final dateFormat = DateFormat('dd MMM yyyy, HH:mm');
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Riwayat Aktivitas')),
-      body: _activities.isEmpty
-          ? const Center(child: Text('Belum ada riwayat aktivitas'))
-          : ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: _activities.length,
-              itemBuilder: (context, index) {
-                final activity = _activities[index];
-                final type = _typesById[activity.activityTypeId];
-                final style = styleForActivity(type?.name ?? '');
-                return Dismissible(
-                  key: Key(activity.id.toString()),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 20),
-                    margin: const EdgeInsets.symmetric(
-                        vertical: 6, horizontal: 4),
-                    child: const Icon(Icons.delete, color: Colors.white),
+    return _activities.isEmpty
+        ? const Center(child: Text('Belum ada riwayat aktivitas'))
+        : ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: _activities.length,
+            itemBuilder: (context, index) {
+              final activity = _activities[index];
+              final type = _typesById[activity.activityTypeId];
+              final style = styleForActivity(type?.name ?? '');
+              return Dismissible(
+                key: Key(activity.id.toString()),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  onDismissed: (_) => _delete(activity.id!),
-                  child: Card(
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: style.color.withValues(alpha: 0.15),
-                        child: Icon(style.icon, color: style.color),
-                      ),
-                      title: Text(type?.name ?? 'Aktivitas'),
-                      subtitle: Text(
-                          '${activity.durationMinutes} menit • ${dateFormat.format(activity.date)}'),
-                      trailing: Text(
-                        '${activity.caloriesBurned.toStringAsFixed(0)} kcal',
-                        style: TextStyle(
-                            color: style.color, fontWeight: FontWeight.bold),
-                      ),
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  margin:
+                      const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                  child: const Icon(Icons.delete, color: Colors.white),
+                ),
+                onDismissed: (_) => _delete(activity.id!),
+                child: Card(
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: style.color.withValues(alpha: 0.15),
+                      child: Icon(style.icon, color: style.color),
+                    ),
+                    title: Text(type?.name ?? 'Aktivitas'),
+                    subtitle: Text(
+                        '${activity.durationMinutes} menit \u2022 ${dateFormat.format(activity.date)}'),
+                    trailing: Text(
+                      '${activity.caloriesBurned.toStringAsFixed(0)} kcal',
+                      style: TextStyle(
+                          color: style.color, fontWeight: FontWeight.bold),
                     ),
                   ),
-                );
-              },
-            ),
-    );
+                ),
+              );
+            },
+          );
   }
 }

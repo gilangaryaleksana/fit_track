@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'db/database_helper.dart';
 import 'models/models.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_navigation_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -89,7 +89,7 @@ class _StartupScreenState extends State<StartupScreen> {
     if (_user == null) {
       return ProfileSetupScreen(onDone: _checkUser);
     }
-    return HomeScreen(userId: _user!.id!);
+    return MainNavigationScreen(userId: _user!.id!);
   }
 }
 
