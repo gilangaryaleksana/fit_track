@@ -4,6 +4,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart' hide ActivityType;
 import 'package:latlong2/latlong.dart' as ll;
+import 'package:permission_handler/permission_handler.dart';
 import '../db/database_helper.dart';
 import '../models/models.dart';
 import '../services/tracking_task_handler.dart';
@@ -39,9 +40,39 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   @override
   void initState() {
     super.initState();
-    _loadTypes();
+    _loadTypes().then((_) => _resumeIfServiceRunning());
     _initOneShotLocation();
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+  }
+
+  Future<void> _resumeIfServiceRunning() async {
+    final running = await FlutterForegroundTask.isRunningService;
+    if (!running) return;
+
+    final typeId =
+        await FlutterForegroundTask.getData<int>(key: 'activityTypeId');
+    final seconds =
+        await FlutterForegroundTask.getData<int>(key: 'accumulatedSeconds') ??
+            0;
+    final distance = await FlutterForegroundTask.getData<double>(
+            key: 'accumulatedDistance') ??
+        0;
+
+    ActivityType? matchedType;
+    for (final t in _types) {
+      if (t.id == typeId) {
+        matchedType = t;
+        break;
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      if (matchedType != null) _selectedType = matchedType;
+      _elapsed = Duration(seconds: seconds);
+      _totalDistanceMeters = distance;
+      _isRunning = true;
+    });
   }
 
   Future<void> _loadTypes() async {
@@ -52,64 +83,33 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     });
   }
 
-  Future<bool> _ensureBackgroundLocationPermission() async {
+  Future<bool> _ensureForegroundLocationPermission() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       setState(() => _locationError = 'Aktifkan GPS/Lokasi di HP kamu dulu');
       return false;
     }
-
     var permission = await Geolocator.checkPermission();
-
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
-
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
       setState(() => _locationError = 'Izin lokasi ditolak');
       return false;
     }
-
-    if (permission == LocationPermission.whileInUse) {
-      setState(() {
-        _locationError =
-            'Izinkan akses lokasi "Sepanjang waktu" melalui Settings';
-      });
-
-      await Geolocator.openAppSettings();
-      return false;
-    }
-
     setState(() => _locationError = null);
-
-    return permission == LocationPermission.always;
+    return true;
   }
 
   /// Just centers the map on open — no continuous stream/service yet,
   /// so we don't burn battery or ask for background permission until
   /// the user actually taps Mulai.
   Future<void> _initOneShotLocation() async {
-    if (!await Geolocator.isLocationServiceEnabled()) return;
-
-    var permission = await Geolocator.checkPermission();
-
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      return;
-    }
-
+    final granted = await _ensureForegroundLocationPermission();
+    if (!granted) return;
     try {
       final current = await Geolocator.getCurrentPosition();
-
-      final latLng = ll.LatLng(
-        current.latitude,
-        current.longitude,
-      );
-
+      final latLng = ll.LatLng(current.latitude, current.longitude);
       setState(() => _currentLatLng = latLng);
       _mapController.move(latLng, 17);
     } catch (_) {
@@ -119,59 +119,40 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
 
   void _onReceiveTaskData(Object data) {
     if (data is! Map) return;
-
     final lat = data['lat'] as double?;
     final lng = data['lng'] as double?;
     final distance = data['distanceMeters'] as double?;
     final seconds = data['elapsedSeconds'] as int?;
 
     if (lat == null || lng == null) return;
-
     final latLng = ll.LatLng(lat, lng);
 
     setState(() {
       _currentLatLng = latLng;
-
-      if (distance != null) {
-        _totalDistanceMeters = distance;
-      }
-
-      if (seconds != null) {
-        _elapsed = Duration(seconds: seconds);
-      }
-
-      _routePoints.add(
-        RoutePoint(
-          activityId: 0,
-          latitude: lat,
-          longitude: lng,
-          recordedAt: DateTime.now(),
-        ),
-      );
+      if (distance != null) _totalDistanceMeters = distance;
+      if (seconds != null) _elapsed = Duration(seconds: seconds);
+      _routePoints.add(RoutePoint(
+        activityId: 0,
+        latitude: lat,
+        longitude: lng,
+        recordedAt: DateTime.now(),
+      ));
     });
-
     _mapController.move(latLng, _mapController.camera.zoom);
   }
 
   double get _liveCalories {
     if (_selectedType == null) return 0;
-
     final minutes = _elapsed.inMilliseconds / 60000;
-
     return minutes * _selectedType!.caloriesPerMinute;
   }
 
   String get _paceLabel {
     final km = _totalDistanceMeters / 1000;
-
-    if (km < 0.02 || _elapsed.inSeconds < 5) {
-      return "–'––\"";
-    }
-
+    if (km < 0.02 || _elapsed.inSeconds < 5) return "\u2013'\u2013\u2013\"";
     final paceMinutes = (_elapsed.inSeconds / 60) / km;
     final minutes = paceMinutes.floor();
     final seconds = ((paceMinutes - minutes) * 60).round();
-
     return "$minutes'${seconds.toString().padLeft(2, '0')}\"";
   }
 
@@ -194,25 +175,41 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     );
   }
 
-  Future<void> _start() async {
-    final granted = await _ensureBackgroundLocationPermission();
+  Future<bool> _ensureBackgroundPermissions() async {
+    final foregroundOk = await _ensureForegroundLocationPermission();
+    if (!foregroundOk) return false;
 
+    final notifPermission =
+        await FlutterForegroundTask.checkNotificationPermission();
+    if (notifPermission != NotificationPermission.granted) {
+      await FlutterForegroundTask.requestNotificationPermission();
+    }
+
+    // Background location so tracking keeps running once minimized/closed.
+    final bgStatus = await Permission.locationAlways.request();
+    if (!bgStatus.isGranted) {
+      setState(() => _locationError =
+          'Aktifkan izin lokasi "Allow all the time" di pengaturan HP biar tracking jalan di background');
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _start() async {
+    final granted = await _ensureBackgroundPermissions();
     if (!granted) return;
 
     await _initForegroundTaskOptions();
 
     await FlutterForegroundTask.saveData(
-      key: 'accumulatedSeconds',
-      value: _elapsed.inSeconds,
-    );
-
+        key: 'accumulatedSeconds', value: _elapsed.inSeconds);
     await FlutterForegroundTask.saveData(
-      key: 'accumulatedDistance',
-      value: _totalDistanceMeters,
-    );
+        key: 'accumulatedDistance', value: _totalDistanceMeters);
+    await FlutterForegroundTask.saveData(
+        key: 'activityTypeId', value: _selectedType!.id!);
 
     await FlutterForegroundTask.startService(
-      notificationTitle: 'FitTrack — Aktivitas berlangsung',
+      notificationTitle: 'FitTrack \u2014 Aktivitas berlangsung',
       notificationText: 'Menyiapkan GPS...',
       callback: startTrackingCallback,
     );
@@ -222,23 +219,17 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
 
   Future<void> _pause() async {
     await FlutterForegroundTask.stopService();
-
     setState(() => _isRunning = false);
   }
 
   Future<void> _finish() async {
     if (_selectedType == null) return;
-
-    if (_isRunning) {
-      await FlutterForegroundTask.stopService();
-    }
-
+    if (_isRunning) await FlutterForegroundTask.stopService();
     if (_elapsed.inSeconds < 1) return;
 
     setState(() => _saving = true);
 
-    final durationMinutes =
-        (_elapsed.inSeconds / 60).round().clamp(1, 999999);
+    final durationMinutes = (_elapsed.inSeconds / 60).round().clamp(1, 999999);
 
     final activity = Activity(
       userId: widget.userId,
@@ -250,7 +241,6 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     );
 
     final activityId = await _db.insertActivity(activity);
-
     if (_routePoints.isNotEmpty) {
       await _db.insertRoutePoints(activityId, _routePoints);
     }
@@ -271,17 +261,13 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       builder: (ctx) =>
           _ActivityTypeSheet(types: _types, selected: _selectedType),
     );
-
-    if (result != null) {
-      setState(() => _selectedType = result);
-    }
+    if (result != null) setState(() => _selectedType = result);
   }
 
   String _formatDuration(Duration d) {
     final h = d.inHours.toString().padLeft(2, '0');
     final m = (d.inMinutes % 60).toString().padLeft(2, '0');
     final s = (d.inSeconds % 60).toString().padLeft(2, '0');
-
     return '$h:$m:$s';
   }
 
@@ -304,9 +290,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _TopBar(
-              title: _selectedType?.name ?? 'Aktivitas Langsung',
-            ),
+            _TopBar(title: _selectedType?.name ?? 'Aktivitas Langsung'),
             Expanded(
               child: Stack(
                 fit: StackFit.expand,
@@ -325,52 +309,41 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                         userAgentPackageName: 'com.gilangarya.fittrack',
                       ),
                       if (_routePoints.length > 1)
-                        PolylineLayer(
-                          polylines: [
-                            Polyline(
-                              points: _routePoints
-                                  .map(
-                                    (p) => ll.LatLng(
-                                      p.latitude,
-                                      p.longitude,
-                                    ),
-                                  )
-                                  .toList(),
-                              color: style.color,
-                              strokeWidth: 4,
-                              strokeCap: StrokeCap.round,
-                              strokeJoin: StrokeJoin.round,
-                            ),
-                          ],
-                        ),
+                        PolylineLayer(polylines: [
+                          Polyline(
+                            points: _routePoints
+                                .map((p) => ll.LatLng(p.latitude, p.longitude))
+                                .toList(),
+                            color: style.color,
+                            strokeWidth: 4,
+                            strokeCap: StrokeCap.round,
+                            strokeJoin: StrokeJoin.round,
+                          ),
+                        ]),
                       if (_currentLatLng != null)
-                        MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: _currentLatLng!,
-                              width: 22,
-                              height: 22,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF4285F4),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 3,
+                        MarkerLayer(markers: [
+                          Marker(
+                            point: _currentLatLng!,
+                            width: 22,
+                            height: 22,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF4285F4),
+                                shape: BoxShape.circle,
+                                border:
+                                    Border.all(color: Colors.white, width: 3),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF4285F4)
+                                        .withValues(alpha: 0.3),
+                                    blurRadius: 10,
+                                    spreadRadius: 4,
                                   ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFF4285F4)
-                                          .withValues(alpha: 0.3),
-                                      blurRadius: 10,
-                                      spreadRadius: 4,
-                                    ),
-                                  ],
-                                ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ]),
                     ],
                   ),
                   if (!started)
@@ -395,9 +368,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     right: 12,
                     bottom: 12,
                     child: _RoundIconButton(
-                      icon: Icons.my_location,
-                      onTap: _recenter,
-                    ),
+                        icon: Icons.my_location, onTap: _recenter),
                   ),
                   if (_locationError != null)
                     Container(
@@ -408,9 +379,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                         _locationError!,
                         textAlign: TextAlign.center,
                         style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
+                            color: Colors.white, fontWeight: FontWeight.w600),
                       ),
                     ),
                 ],
@@ -420,9 +389,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
               padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
               decoration: const BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(24),
-                ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                 boxShadow: [
                   BoxShadow(
                     color: Color(0x14142020),
@@ -437,17 +404,13 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   Row(
                     children: [
                       _Stat(
-                        label: '⏱ Durasi',
-                        value: _formatDuration(_elapsed),
-                      ),
+                          label: '\u23f1 Durasi',
+                          value: _formatDuration(_elapsed)),
+                      const _StatDivider(),
+                      _Stat(label: '\u26a1 Pace', value: _paceLabel),
                       const _StatDivider(),
                       _Stat(
-                        label: '⚡ Pace',
-                        value: _paceLabel,
-                      ),
-                      const _StatDivider(),
-                      _Stat(
-                        label: '🔥 Kalori',
+                        label: '\ud83d\udd25 Kalori',
                         value: _liveCalories.toStringAsFixed(0),
                       ),
                     ],
@@ -457,28 +420,21 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
+                          horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF5F7FA),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: const Color(0xFFE4EAE9),
-                        ),
+                        border: Border.all(color: const Color(0xFFE4EAE9)),
                       ),
                       child: TextField(
                         controller: _noteController,
                         style: const TextStyle(fontSize: 12.5),
                         decoration: const InputDecoration(
                           hintText: 'Catatan (opsional)',
-                          hintStyle: TextStyle(
-                            color: Color(0xFF5B6B69),
-                          ),
+                          hintStyle: TextStyle(color: Color(0xFF5B6B69)),
                           border: InputBorder.none,
                           isDense: true,
-                          contentPadding:
-                              EdgeInsets.symmetric(vertical: 12),
+                          contentPadding: EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
                     ),
@@ -502,19 +458,13 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: _saving
-                                ? null
-                                : (_isRunning ? _pause : _start),
+                            onPressed:
+                                _saving ? null : (_isRunning ? _pause : _start),
                             style: OutlinedButton.styleFrom(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
-                              side: const BorderSide(
-                                color: Color(0xFFE4EAE9),
-                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: Color(0xFFE4EAE9)),
                             ),
-                            child: Text(
-                              _isRunning ? 'Jeda' : 'Lanjut',
-                            ),
+                            child: Text(_isRunning ? 'Jeda' : 'Lanjut'),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -523,17 +473,14 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                             onPressed: _saving ? null : _finish,
                             style: FilledButton.styleFrom(
                               backgroundColor: const Color(0xFF2EC4B6),
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             child: _saving
                                 ? const SizedBox(
                                     height: 18,
                                     width: 18,
                                     child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
+                                        color: Colors.white, strokeWidth: 2),
                                   )
                                 : const Text('Selesai & Simpan'),
                           ),
@@ -552,7 +499,6 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
 
 class _TopBar extends StatelessWidget {
   final String title;
-
   const _TopBar({required this.title});
 
   @override
@@ -569,10 +515,7 @@ class _TopBar extends StatelessWidget {
             child: Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(width: 40),
@@ -586,12 +529,8 @@ class _TypePill extends StatelessWidget {
   final ActivityStyle style;
   final String name;
   final VoidCallback onTap;
-
-  const _TypePill({
-    required this.style,
-    required this.name,
-    required this.onTap,
-  });
+  const _TypePill(
+      {required this.style, required this.name, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -604,35 +543,22 @@ class _TypePill extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 10,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
               CircleAvatar(
                 radius: 15,
                 backgroundColor: style.color.withValues(alpha: 0.15),
-                child: Icon(
-                  style.icon,
-                  color: style.color,
-                  size: 15,
-                ),
+                child: Icon(style.icon, color: style.color, size: 15),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
+                child: Text(name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 13)),
               ),
-              const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: Color(0xFFB7C2C0),
-              ),
+              const Icon(Icons.keyboard_arrow_down_rounded,
+                  color: Color(0xFFB7C2C0)),
             ],
           ),
         ),
@@ -649,10 +575,7 @@ class _BackgroundActiveBadge extends StatelessWidget {
     return Align(
       alignment: Alignment.topCenter,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 7,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.75),
           borderRadius: BorderRadius.circular(20),
@@ -660,19 +583,10 @@ class _BackgroundActiveBadge extends StatelessWidget {
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.notifications_active,
-              color: Colors.white,
-              size: 13,
-            ),
+            Icon(Icons.notifications_active, color: Colors.white, size: 13),
             SizedBox(width: 6),
-            Text(
-              'Tetap tracking walau app ditutup',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-              ),
-            ),
+            Text('Tetap tracking walau app ditutup',
+                style: TextStyle(color: Colors.white, fontSize: 11)),
           ],
         ),
       ),
@@ -683,11 +597,7 @@ class _BackgroundActiveBadge extends StatelessWidget {
 class _RoundIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-
-  const _RoundIconButton({
-    required this.icon,
-    required this.onTap,
-  });
+  const _RoundIconButton({required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -701,11 +611,7 @@ class _RoundIconButton extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(9),
-          child: Icon(
-            icon,
-            size: 18,
-            color: const Color(0xFF14201F),
-          ),
+          child: Icon(icon, size: 18, color: const Color(0xFF14201F)),
         ),
       ),
     );
@@ -715,32 +621,19 @@ class _RoundIconButton extends StatelessWidget {
 class _Stat extends StatelessWidget {
   final String label;
   final String value;
-
-  const _Stat({
-    required this.label,
-    required this.value,
-  });
+  const _Stat({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
       child: Column(
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 10.5,
-              color: Color(0xFF5B6B69),
-            ),
-          ),
+          Text(label,
+              style: const TextStyle(fontSize: 10.5, color: Color(0xFF5B6B69))),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          Text(value,
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -749,25 +642,16 @@ class _Stat extends StatelessWidget {
 
 class _StatDivider extends StatelessWidget {
   const _StatDivider();
-
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 30,
-      color: const Color(0xFFE4EAE9),
-    );
+    return Container(width: 1, height: 30, color: const Color(0xFFE4EAE9));
   }
 }
 
 class _ActivityTypeSheet extends StatelessWidget {
   final List<ActivityType> types;
   final ActivityType? selected;
-
-  const _ActivityTypeSheet({
-    required this.types,
-    required this.selected,
-  });
+  const _ActivityTypeSheet({required this.types, required this.selected});
 
   @override
   Widget build(BuildContext context) {
@@ -796,10 +680,8 @@ class _ActivityTypeSheet extends StatelessWidget {
                 onTap: () => Navigator.pop(context, type),
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   color: selected?.id == type.id
                       ? const Color(0xFFEAF7F6)
                       : Colors.transparent,
@@ -817,13 +699,9 @@ class _ActivityTypeSheet extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Text(
-                        type.name,
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      Text(type.name,
+                          style: const TextStyle(
+                              fontSize: 13.5, fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),

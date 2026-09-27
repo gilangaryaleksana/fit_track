@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import '../db/database_helper.dart';
 import '../models/models.dart';
 import '../utils/activity_style.dart';
@@ -21,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   DailyTarget? _target;
   List<Activity> _todayActivities = [];
   Map<int, ActivityType> _typesById = {};
+  _OngoingSession? _ongoingSession;
 
   @override
   void initState() {
@@ -40,6 +42,38 @@ class _HomeScreenState extends State<HomeScreen> {
       _todayActivities = activities;
       _typesById = {for (final t in types) t.id!: t};
     });
+    await _checkOngoingSession();
+  }
+
+  Future<void> _checkOngoingSession() async {
+    final running = await FlutterForegroundTask.isRunningService;
+    if (!running) {
+      if (mounted) setState(() => _ongoingSession = null);
+      return;
+    }
+
+    final typeId =
+        await FlutterForegroundTask.getData<int>(key: 'activityTypeId');
+    final seconds =
+        await FlutterForegroundTask.getData<int>(key: 'accumulatedSeconds') ??
+            0;
+    final distance = await FlutterForegroundTask.getData<double>(
+            key: 'accumulatedDistance') ??
+        0;
+
+    final type = typeId != null ? _typesById[typeId] : null;
+    final calories =
+        type != null ? (seconds / 60) * type.caloriesPerMinute : 0.0;
+
+    if (!mounted) return;
+    setState(() {
+      _ongoingSession = _OngoingSession(
+        type: type,
+        elapsed: Duration(seconds: seconds),
+        distanceMeters: distance,
+        calories: calories,
+      );
+    });
   }
 
   @override
@@ -56,6 +90,21 @@ class _HomeScreenState extends State<HomeScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (_ongoingSession != null) ...[
+              _OngoingSessionBanner(
+                session: _ongoingSession!,
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => LiveTrackingScreen(userId: widget.userId),
+                    ),
+                  );
+                  _loadData();
+                },
+              ),
+              const SizedBox(height: 14),
+            ],
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -82,7 +131,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: Colors.white, size: 20),
                       SizedBox(width: 6),
                       Text('Kalori Terbakar Hari Ini',
-                          style: TextStyle(fontSize: 14, color: Colors.white70)),
+                          style:
+                              TextStyle(fontSize: 14, color: Colors.white70)),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -101,8 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         value: progress,
                         minHeight: 8,
                         backgroundColor: Colors.white24,
-                        valueColor:
-                            const AlwaysStoppedAnimation(Colors.white),
+                        valueColor: const AlwaysStoppedAnimation(Colors.white),
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -112,7 +161,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ] else
                     TextButton.icon(
-                      style: TextButton.styleFrom(foregroundColor: Colors.white),
+                      style:
+                          TextButton.styleFrom(foregroundColor: Colors.white),
                       icon: const Icon(Icons.flag_outlined),
                       onPressed: () async {
                         await Navigator.push(
@@ -224,10 +274,112 @@ class _HomeScreenState extends State<HomeScreen> {
           _loadData();
         },
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.history_outlined), selectedIcon: Icon(Icons.history), label: 'Riwayat'),
-          NavigationDestination(icon: Icon(Icons.flag_outlined), selectedIcon: Icon(Icons.flag), label: 'Target'),
+          NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home),
+              label: 'Home'),
+          NavigationDestination(
+              icon: Icon(Icons.history_outlined),
+              selectedIcon: Icon(Icons.history),
+              label: 'Riwayat'),
+          NavigationDestination(
+              icon: Icon(Icons.flag_outlined),
+              selectedIcon: Icon(Icons.flag),
+              label: 'Target'),
         ],
+      ),
+    );
+  }
+}
+
+class _OngoingSession {
+  final ActivityType? type;
+  final Duration elapsed;
+  final double distanceMeters;
+  final double calories;
+
+  _OngoingSession({
+    required this.type,
+    required this.elapsed,
+    required this.distanceMeters,
+    required this.calories,
+  });
+}
+
+class _OngoingSessionBanner extends StatelessWidget {
+  final _OngoingSession session;
+  final VoidCallback onTap;
+  const _OngoingSessionBanner({required this.session, required this.onTap});
+
+  String _formatDuration(Duration d) {
+    final h = d.inHours.toString().padLeft(2, '0');
+    final m = (d.inMinutes % 60).toString().padLeft(2, '0');
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$h:$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final style = session.type != null
+        ? styleForActivity(session.type!.name)
+        : const ActivityStyle(Icons.sports, Colors.teal);
+    final km = session.distanceMeters / 1000;
+
+    return Material(
+      color: const Color(0xFF1C2744),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF4ADE80),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(style.icon, color: Colors.white70, size: 12),
+                        const SizedBox(width: 5),
+                        const Text('SEDANG BERLANGSUNG',
+                            style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      session.type?.name ?? 'Aktivitas',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${_formatDuration(session.elapsed)} \u2022 ${km.toStringAsFixed(1)} km \u2022 ${session.calories.toStringAsFixed(0)} kcal',
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.white54),
+            ],
+          ),
+        ),
       ),
     );
   }

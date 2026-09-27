@@ -22,7 +22,7 @@ class TrackingTaskHandler extends TaskHandler {
   }
 
   @override
-  Future<void> onRepeatEvent(DateTime timestamp) async {
+  void onRepeatEvent(DateTime timestamp) async {
     try {
       final position = await Geolocator.getCurrentPosition(
         locationSettings:
@@ -41,6 +41,13 @@ class TrackingTaskHandler extends TaskHandler {
 
       final elapsedSeconds =
           _accumulatedSeconds + timestamp.difference(_tickStart!).inSeconds;
+
+      // Persist progress so the UI can restore it even after the app
+      // process was killed and reopened while this service keeps running.
+      await FlutterForegroundTask.saveData(
+          key: 'accumulatedSeconds', value: elapsedSeconds);
+      await FlutterForegroundTask.saveData(
+          key: 'accumulatedDistance', value: _distanceMeters);
 
       FlutterForegroundTask.updateService(
         notificationTitle: 'FitTrack \u2014 Aktivitas berlangsung',

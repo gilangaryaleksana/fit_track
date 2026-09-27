@@ -144,7 +144,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _heightController,
-                decoration: const InputDecoration(labelText: 'Tinggi Badan (cm)'),
+                decoration:
+                    const InputDecoration(labelText: 'Tinggi Badan (cm)'),
                 keyboardType: TextInputType.number,
                 validator: (v) => double.tryParse(v ?? '') == null
                     ? 'Harus berupa angka'
@@ -153,7 +154,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _weightController,
-                decoration: const InputDecoration(labelText: 'Berat Badan (kg)'),
+                decoration:
+                    const InputDecoration(labelText: 'Berat Badan (kg)'),
                 keyboardType: TextInputType.number,
                 validator: (v) => double.tryParse(v ?? '') == null
                     ? 'Harus berupa angka'
