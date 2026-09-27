@@ -32,6 +32,36 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   bool _isRunning = false;
   bool _saving = false;
 
+  // Drives smooth per-second UI updates between the background service's
+  // 3-second sync ticks, so the displayed clock doesn't jump by 3s at a time.
+  Timer? _uiTicker;
+  Duration _displayBaseElapsed = Duration.zero;
+  DateTime? _displayBaseAt;
+
+  Duration get _displayElapsed {
+    if (!_isRunning || _displayBaseAt == null) return _elapsed;
+    return _displayBaseElapsed + DateTime.now().difference(_displayBaseAt!);
+  }
+
+  void _resyncDisplay() {
+    _displayBaseElapsed = _elapsed;
+    _displayBaseAt = DateTime.now();
+  }
+
+  void _startUiTicker() {
+    _uiTicker?.cancel();
+    _resyncDisplay();
+    _uiTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _stopUiTicker() {
+    _uiTicker?.cancel();
+    _uiTicker = null;
+    _elapsed = _displayElapsed;
+  }
+
   final List<RoutePoint> _routePoints = [];
   ll.LatLng? _currentLatLng;
   double _totalDistanceMeters = 0;
@@ -47,9 +77,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   }
 
   Future<void> _resumeIfServiceRunning() async {
-    final running = await FlutterForegroundTask.isRunningService;
-    if (!running) return;
+    final sessionActive =
+        await FlutterForegroundTask.getData<bool>(key: 'sessionActive') ??
+            false;
+    if (!sessionActive) return;
 
+    final isRunning = await FlutterForegroundTask.isRunningService;
     final typeId =
         await FlutterForegroundTask.getData<int>(key: 'activityTypeId');
     final seconds =
@@ -76,8 +109,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       _elapsed = Duration(seconds: seconds);
       _totalDistanceMeters = distance;
       _movingSeconds = movingSeconds;
-      _isRunning = true;
+      _isRunning = isRunning;
     });
+    if (isRunning) _startUiTicker();
   }
 
   Future<void> _loadTypes() async {
@@ -145,6 +179,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
         recordedAt: DateTime.now(),
       ));
     });
+    if (_isRunning) _resyncDisplay();
     _mapController.move(latLng, _mapController.camera.zoom);
   }
 
@@ -158,11 +193,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
 
   String get _paceLabel {
     final km = _totalDistanceMeters / 1000;
-    if (km < 0.02 || _elapsed.inSeconds < 5) return "\u2013'\u2013\u2013\"";
-    final paceMinutes = (_elapsed.inSeconds / 60) / km;
+    final seconds = _displayElapsed.inSeconds;
+    if (km < 0.02 || seconds < 5) return "\u2013'\u2013\u2013\"";
+    final paceMinutes = (seconds / 60) / km;
     final minutes = paceMinutes.floor();
-    final seconds = ((paceMinutes - minutes) * 60).round();
-    return "$minutes'${seconds.toString().padLeft(2, '0')}\"";
+    final secs = ((paceMinutes - minutes) * 60).round();
+    return "$minutes'${secs.toString().padLeft(2, '0')}\"";
   }
 
   Future<void> _initForegroundTaskOptions() async {
@@ -218,6 +254,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
         key: 'accumulatedMovingSeconds', value: _movingSeconds);
     await FlutterForegroundTask.saveData(
         key: 'activityTypeId', value: _selectedType!.id!);
+    await FlutterForegroundTask.saveData(key: 'sessionActive', value: true);
 
     await FlutterForegroundTask.startService(
       notificationTitle: 'FitTrack \u2014 Aktivitas berlangsung',
@@ -226,16 +263,19 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     );
 
     setState(() => _isRunning = true);
+    _startUiTicker();
   }
 
   Future<void> _pause() async {
     await FlutterForegroundTask.stopService();
+    _stopUiTicker();
     setState(() => _isRunning = false);
   }
 
   Future<void> _finish() async {
     if (_selectedType == null) return;
     if (_isRunning) await FlutterForegroundTask.stopService();
+    _stopUiTicker();
     if (_elapsed.inSeconds < 1) return;
 
     setState(() => _saving = true);
@@ -255,6 +295,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     if (_routePoints.isNotEmpty) {
       await _db.insertRoutePoints(activityId, _routePoints);
     }
+
+    await FlutterForegroundTask.saveData(key: 'sessionActive', value: false);
 
     if (mounted) Navigator.pop(context);
   }
@@ -285,6 +327,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   @override
   void dispose() {
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
+    _uiTicker?.cancel();
     _noteController.dispose();
     super.dispose();
   }
@@ -301,7 +344,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _TopBar(title: _selectedType?.name ?? 'Aktivitas Langsung'),
+            _TopBar(
+                title: _selectedType?.name ?? 'Aktivitas Langsung',
+                style: style),
             Expanded(
               child: Stack(
                 fit: StackFit.expand,
@@ -416,7 +461,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     children: [
                       _Stat(
                           label: '\u23f1 Durasi',
-                          value: _formatDuration(_elapsed)),
+                          value: _formatDuration(_displayElapsed)),
                       const _StatDivider(),
                       _Stat(label: '\u26a1 Pace', value: _paceLabel),
                       const _StatDivider(),
@@ -510,7 +555,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
 
 class _TopBar extends StatelessWidget {
   final String title;
-  const _TopBar({required this.title});
+  final ActivityStyle style;
+  const _TopBar({required this.title, required this.style});
 
   @override
   Widget build(BuildContext context) {
@@ -523,10 +569,25 @@ class _TopBar extends StatelessWidget {
             onPressed: () => Navigator.pop(context),
           ),
           Expanded(
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircleAvatar(
+                  radius: 12,
+                  backgroundColor: style.color.withValues(alpha: 0.15),
+                  child: Icon(style.icon, color: style.color, size: 13),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 40),

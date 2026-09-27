@@ -51,12 +51,15 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _checkOngoingSession() async {
-    final running = await FlutterForegroundTask.isRunningService;
-    if (!running) {
+    final sessionActive =
+        await FlutterForegroundTask.getData<bool>(key: 'sessionActive') ??
+            false;
+    if (!sessionActive) {
       if (mounted) setState(() => _ongoingSession = null);
       return;
     }
 
+    final isRunning = await FlutterForegroundTask.isRunningService;
     final typeId =
         await FlutterForegroundTask.getData<int>(key: 'activityTypeId');
     final seconds =
@@ -65,10 +68,13 @@ class HomeScreenState extends State<HomeScreen> {
     final distance = await FlutterForegroundTask.getData<double>(
             key: 'accumulatedDistance') ??
         0;
+    final movingSeconds = await FlutterForegroundTask.getData<int>(
+            key: 'accumulatedMovingSeconds') ??
+        0;
 
     final type = typeId != null ? _typesById[typeId] : null;
     final calories =
-        type != null ? (seconds / 60) * type.caloriesPerMinute : 0.0;
+        type != null ? (movingSeconds / 60) * type.caloriesPerMinute : 0.0;
 
     if (!mounted) return;
     setState(() {
@@ -77,6 +83,7 @@ class HomeScreenState extends State<HomeScreen> {
         elapsed: Duration(seconds: seconds),
         distanceMeters: distance,
         calories: calories,
+        isRunning: isRunning,
       );
     });
   }
@@ -262,12 +269,14 @@ class _OngoingSession {
   final Duration elapsed;
   final double distanceMeters;
   final double calories;
+  final bool isRunning;
 
   _OngoingSession({
     required this.type,
     required this.elapsed,
     required this.distanceMeters,
     required this.calories,
+    required this.isRunning,
   });
 }
 
@@ -289,6 +298,10 @@ class _OngoingSessionBanner extends StatelessWidget {
         ? styleForActivity(session.type!.name)
         : const ActivityStyle(Icons.sports, Colors.teal);
     final km = session.distanceMeters / 1000;
+    final dotColor =
+        session.isRunning ? const Color(0xFF4ADE80) : const Color(0xFFFBBF24);
+    final label =
+        session.isRunning ? 'SEDANG BERLANGSUNG' : 'DIJEDA \u2014 lanjutkan?';
 
     return Material(
       color: const Color(0xFF1C2744),
@@ -303,10 +316,8 @@ class _OngoingSessionBanner extends StatelessWidget {
               Container(
                 width: 10,
                 height: 10,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF4ADE80),
-                  shape: BoxShape.circle,
-                ),
+                decoration:
+                    BoxDecoration(color: dotColor, shape: BoxShape.circle),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -317,8 +328,8 @@ class _OngoingSessionBanner extends StatelessWidget {
                       children: [
                         Icon(style.icon, color: Colors.white70, size: 12),
                         const SizedBox(width: 5),
-                        const Text('SEDANG BERLANGSUNG',
-                            style: TextStyle(
+                        Text(label,
+                            style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w600)),
