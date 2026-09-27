@@ -35,6 +35,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   final List<RoutePoint> _routePoints = [];
   ll.LatLng? _currentLatLng;
   double _totalDistanceMeters = 0;
+  int _movingSeconds = 0;
   String? _locationError;
 
   @override
@@ -57,6 +58,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     final distance = await FlutterForegroundTask.getData<double>(
             key: 'accumulatedDistance') ??
         0;
+    final movingSeconds = await FlutterForegroundTask.getData<int>(
+            key: 'accumulatedMovingSeconds') ??
+        0;
 
     ActivityType? matchedType;
     for (final t in _types) {
@@ -71,6 +75,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       if (matchedType != null) _selectedType = matchedType;
       _elapsed = Duration(seconds: seconds);
       _totalDistanceMeters = distance;
+      _movingSeconds = movingSeconds;
       _isRunning = true;
     });
   }
@@ -123,6 +128,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     final lng = data['lng'] as double?;
     final distance = data['distanceMeters'] as double?;
     final seconds = data['elapsedSeconds'] as int?;
+    final movingSeconds = data['movingSeconds'] as int?;
 
     if (lat == null || lng == null) return;
     final latLng = ll.LatLng(lat, lng);
@@ -131,6 +137,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       _currentLatLng = latLng;
       if (distance != null) _totalDistanceMeters = distance;
       if (seconds != null) _elapsed = Duration(seconds: seconds);
+      if (movingSeconds != null) _movingSeconds = movingSeconds;
       _routePoints.add(RoutePoint(
         activityId: 0,
         latitude: lat,
@@ -141,9 +148,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     _mapController.move(latLng, _mapController.camera.zoom);
   }
 
+  /// Movement-based: only the time spent actually moving (per GPS) counts
+  /// toward calories, so standing still no longer burns anything.
   double get _liveCalories {
     if (_selectedType == null) return 0;
-    final minutes = _elapsed.inMilliseconds / 60000;
+    final minutes = _movingSeconds / 60;
     return minutes * _selectedType!.caloriesPerMinute;
   }
 
@@ -205,6 +214,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
         key: 'accumulatedSeconds', value: _elapsed.inSeconds);
     await FlutterForegroundTask.saveData(
         key: 'accumulatedDistance', value: _totalDistanceMeters);
+    await FlutterForegroundTask.saveData(
+        key: 'accumulatedMovingSeconds', value: _movingSeconds);
     await FlutterForegroundTask.saveData(
         key: 'activityTypeId', value: _selectedType!.id!);
 
