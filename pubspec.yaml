@@ -18,6 +18,8 @@ dependencies:
   latlong2: ^0.9.1
   flutter_foreground_task: ^8.13.0
   permission_handler: ^11.3.0
+  http: ^1.2.0
+  shared_preferences: ^2.2.0
 
 dev_dependencies:
   flutter_test:

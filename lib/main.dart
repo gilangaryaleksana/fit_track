@@ -3,6 +3,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'db/database_helper.dart';
 import 'models/models.dart';
 import 'screens/main_navigation_screen.dart';
+import 'services/api_client.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -163,6 +164,29 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               ),
               const SizedBox(height: 24),
               FilledButton(onPressed: _save, child: const Text('Mulai')),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    // Ganti login/password ini sesuai akun yang kamu daftarin
+                    // lewat curl/Postman tadi.
+                    final data = await ApiClient.instance
+                        .login(login: 'gilang', password: 'rahasia123');
+                    messenger.showSnackBar(SnackBar(
+                      content: Text(
+                          'Berhasil! Login sebagai ${data['user']['name']}'),
+                      backgroundColor: Colors.green,
+                    ));
+                  } catch (e) {
+                    messenger.showSnackBar(SnackBar(
+                      content: Text('Gagal konek: $e'),
+                      backgroundColor: Colors.red,
+                    ));
+                  }
+                },
+                child: const Text('Tes Koneksi API (sementara)'),
+              ),
             ],
           ),
         ),
