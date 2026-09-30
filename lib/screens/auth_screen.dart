@@ -22,24 +22,49 @@ class _AuthScreenState extends State<AuthScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(24, 56, 24, 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.fitness_center, size: 48, color: Color(0xFF2EC4B6)),
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF2EC4B6), Color(0xFF1B9AAA)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF2EC4B6).withValues(alpha: 0.4),
+                        blurRadius: 24,
+                        offset: const Offset(0, 12),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.fitness_center,
+                      color: Colors.white, size: 26),
+                ),
                 const SizedBox(height: 12),
                 Text(
                   _isRegister ? 'Buat Akun FitTrack' : 'Masuk ke FitTrack',
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      fontSize: 19, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 22),
                 if (_isRegister) const _RegisterForm() else const _LoginForm(),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 TextButton(
                   onPressed: () => setState(() => _isRegister = !_isRegister),
-                  child: Text(_isRegister
-                      ? 'Sudah punya akun? Masuk'
-                      : 'Belum punya akun? Daftar'),
+                  child: Text(
+                    _isRegister
+                        ? 'Sudah punya akun? Masuk'
+                        : 'Belum punya akun? Daftar',
+                    style: const TextStyle(
+                        color: Color(0xFF1B9AAA), fontWeight: FontWeight.w600),
+                  ),
                 ),
               ],
             ),
@@ -84,6 +109,121 @@ Future<void> _enterAppWithServerUser(
   );
 }
 
+/// Field style shared across the app: white rounded box, icon badge,
+/// teal border on focus. Manages its own FocusNode so callers don't need
+/// external boilerplate.
+class _StyledTextField extends StatefulWidget {
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final String? hint;
+  final bool obscureText;
+  final TextInputType? keyboardType;
+  final String? Function(String?)? validator;
+
+  const _StyledTextField({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    this.hint,
+    this.obscureText = false,
+    this.keyboardType,
+    this.validator,
+  });
+
+  @override
+  State<_StyledTextField> createState() => _StyledTextFieldState();
+}
+
+class _StyledTextFieldState extends State<_StyledTextField> {
+  final _focusNode = FocusNode();
+  late bool _obscured = widget.obscureText;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isFocused = _focusNode.hasFocus;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(
+            widget.label,
+            style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF5B6B69)),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color:
+                  isFocused ? const Color(0xFF2EC4B6) : const Color(0xFFE4EAE9),
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 15,
+                backgroundColor:
+                    const Color(0xFF2EC4B6).withValues(alpha: 0.12),
+                child:
+                    Icon(widget.icon, size: 14, color: const Color(0xFF1B9AAA)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  controller: widget.controller,
+                  focusNode: _focusNode,
+                  obscureText: widget.obscureText && _obscured,
+                  keyboardType: widget.keyboardType,
+                  validator: widget.validator,
+                  style: const TextStyle(fontSize: 13.5),
+                  decoration: InputDecoration(
+                    hintText: widget.hint,
+                    hintStyle: const TextStyle(color: Color(0xFFA7B3B1)),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              if (widget.obscureText)
+                GestureDetector(
+                  onTap: () => setState(() => _obscured = !_obscured),
+                  child: Icon(
+                    _obscured
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                    size: 16,
+                    color: const Color(0xFFB7C2C0),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _LoginForm extends StatefulWidget {
   const _LoginForm();
 
@@ -111,7 +251,8 @@ class _LoginFormState extends State<_LoginForm> {
         password: _passwordController.text,
       );
       if (!mounted) return;
-      await _enterAppWithServerUser(context, data['user'] as Map<String, dynamic>);
+      await _enterAppWithServerUser(
+          context, data['user'] as Map<String, dynamic>);
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -126,30 +267,38 @@ class _LoginFormState extends State<_LoginForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextFormField(
+          _StyledTextField(
             controller: _loginController,
-            decoration: const InputDecoration(labelText: 'Email atau Username'),
+            label: 'Email atau Username',
+            icon: Icons.person_outline,
+            hint: 'gilang',
             validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
           ),
-          const SizedBox(height: 12),
-          TextFormField(
+          const SizedBox(height: 14),
+          _StyledTextField(
             controller: _passwordController,
-            decoration: const InputDecoration(labelText: 'Password'),
+            label: 'Password',
+            icon: Icons.lock_outline,
+            hint: '••••••••',
             obscureText: true,
             validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
-            Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 12.5)),
+            Text(_error!,
+                style: const TextStyle(color: Colors.red, fontSize: 12.5)),
           ],
           const SizedBox(height: 20),
           FilledButton(
             onPressed: _submitting ? null : _submit,
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF2EC4B6)),
             child: _submitting
                 ? const SizedBox(
                     height: 20,
                     width: 20,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2),
                   )
                 : const Text('Masuk'),
           ),
@@ -212,39 +361,50 @@ class _RegisterFormState extends State<_RegisterForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextFormField(
+          _StyledTextField(
             controller: _nameController,
-            decoration: const InputDecoration(labelText: 'Nama'),
+            label: 'Nama',
+            icon: Icons.badge_outlined,
+            hint: 'Gilang Arya',
             validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
           ),
-          const SizedBox(height: 12),
-          TextFormField(
+          const SizedBox(height: 14),
+          _StyledTextField(
             controller: _usernameController,
-            decoration: const InputDecoration(labelText: 'Username'),
+            label: 'Username',
+            icon: Icons.alternate_email,
+            hint: 'gilang',
             validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
           ),
-          const SizedBox(height: 12),
-          TextFormField(
+          const SizedBox(height: 14),
+          _StyledTextField(
             controller: _emailController,
-            decoration: const InputDecoration(labelText: 'Email'),
+            label: 'Email',
+            icon: Icons.mail_outline,
+            hint: 'nama@email.com',
             keyboardType: TextInputType.emailAddress,
             validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
           ),
-          const SizedBox(height: 12),
-          TextFormField(
+          const SizedBox(height: 14),
+          _StyledTextField(
             controller: _passwordController,
-            decoration: const InputDecoration(labelText: 'Password (min. 8 karakter)'),
+            label: 'Password',
+            icon: Icons.lock_outline,
+            hint: 'min. 8 karakter',
             obscureText: true,
             validator: (v) =>
                 v == null || v.length < 8 ? 'Minimal 8 karakter' : null,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: TextFormField(
+                child: _StyledTextField(
                   controller: _heightController,
-                  decoration: const InputDecoration(labelText: 'Tinggi (cm)'),
+                  label: 'Tinggi (cm)',
+                  icon: Icons.straighten,
+                  hint: '170',
                   keyboardType: TextInputType.number,
                   validator: (v) =>
                       double.tryParse(v ?? '') == null ? 'Angka' : null,
@@ -252,9 +412,11 @@ class _RegisterFormState extends State<_RegisterForm> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: TextFormField(
+                child: _StyledTextField(
                   controller: _weightController,
-                  decoration: const InputDecoration(labelText: 'Berat (kg)'),
+                  label: 'Berat (kg)',
+                  icon: Icons.monitor_weight_outlined,
+                  hint: '65',
                   keyboardType: TextInputType.number,
                   validator: (v) =>
                       double.tryParse(v ?? '') == null ? 'Angka' : null,
@@ -264,16 +426,20 @@ class _RegisterFormState extends State<_RegisterForm> {
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
-            Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 12.5)),
+            Text(_error!,
+                style: const TextStyle(color: Colors.red, fontSize: 12.5)),
           ],
           const SizedBox(height: 20),
           FilledButton(
             onPressed: _submitting ? null : _submit,
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF2EC4B6)),
             child: _submitting
                 ? const SizedBox(
                     height: 20,
                     width: 20,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2),
                   )
                 : const Text('Daftar'),
           ),
