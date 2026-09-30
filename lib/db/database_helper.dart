@@ -117,6 +117,13 @@ class DatabaseHelper {
     return AppUser.fromMap(result.first);
   }
 
+  Future<AppUser?> getUserByEmail(String email) async {
+    final db = await database;
+    final result = await db.query('users', where: 'email = ?', whereArgs: [email]);
+    if (result.isEmpty) return null;
+    return AppUser.fromMap(result.first);
+  }
+
   // ---------- ACTIVITY TYPES ----------
   Future<List<ActivityType>> getActivityTypes() async {
     final db = await database;
@@ -181,8 +188,7 @@ class DatabaseHelper {
   }
 
   // ---------- ROUTE POINTS ----------
-  Future<void> insertRoutePoints(
-      int activityId, List<RoutePoint> points) async {
+  Future<void> insertRoutePoints(int activityId, List<RoutePoint> points) async {
     if (points.isEmpty) return;
     final db = await database;
     final batch = db.batch();

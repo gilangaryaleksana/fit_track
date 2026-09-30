@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'db/database_helper.dart';
 import 'models/models.dart';
+import 'screens/auth_screen.dart';
 import 'screens/main_navigation_screen.dart';
 import 'services/api_client.dart';
 
@@ -54,8 +56,12 @@ class HealthTrackerApp extends StatelessWidget {
   }
 }
 
-// Checks if a user already exists (id = 1). If not, shows a quick
-// profile setup form first. This app is single-user/local for simplicity.
+/// Key used to remember which LOCAL sqlite user row (not the server's user
+/// id) belongs to the account currently logged in via [ApiClient].
+const kLocalUserIdKey = 'local_user_id';
+
+/// Decides where to land: straight into the app if there's a saved session
+/// (API token + matching local row), otherwise the Login/Register screen.
 class StartupScreen extends StatefulWidget {
   const StartupScreen({super.key});
 
@@ -66,18 +72,27 @@ class StartupScreen extends StatefulWidget {
 class _StartupScreenState extends State<StartupScreen> {
   final _db = DatabaseHelper.instance;
   bool _loading = true;
-  AppUser? _user;
+  int? _localUserId;
 
   @override
   void initState() {
     super.initState();
-    _checkUser();
+    _checkSession();
   }
 
-  Future<void> _checkUser() async {
-    final user = await _db.getUser(1);
+  Future<void> _checkSession() async {
+    final loggedIn = await ApiClient.instance.isLoggedIn;
+    if (!loggedIn) {
+      setState(() => _loading = false);
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final localId = prefs.getInt(kLocalUserIdKey);
+    final localUser = localId != null ? await _db.getUser(localId) : null;
+
     setState(() {
-      _user = user;
+      _localUserId = localUser?.id;
       _loading = false;
     });
   }
@@ -87,110 +102,9 @@ class _StartupScreenState extends State<StartupScreen> {
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (_user == null) {
-      return ProfileSetupScreen(onDone: _checkUser);
+    if (_localUserId == null) {
+      return const AuthScreen();
     }
-    return MainNavigationScreen(userId: _user!.id!);
-  }
-}
-
-class ProfileSetupScreen extends StatefulWidget {
-  final VoidCallback onDone;
-  const ProfileSetupScreen({super.key, required this.onDone});
-
-  @override
-  State<ProfileSetupScreen> createState() => _ProfileSetupScreenState();
-}
-
-class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _heightController = TextEditingController();
-  final _weightController = TextEditingController();
-  final _db = DatabaseHelper.instance;
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    await _db.insertUser(AppUser(
-      name: _nameController.text,
-      email: _emailController.text,
-      heightCm: double.parse(_heightController.text),
-      weightKg: double.parse(_weightController.text),
-    ));
-    widget.onDone();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Lengkapi Profil')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Nama'),
-                validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(labelText: 'Email'),
-                validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _heightController,
-                decoration:
-                    const InputDecoration(labelText: 'Tinggi Badan (cm)'),
-                keyboardType: TextInputType.number,
-                validator: (v) => double.tryParse(v ?? '') == null
-                    ? 'Harus berupa angka'
-                    : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _weightController,
-                decoration:
-                    const InputDecoration(labelText: 'Berat Badan (kg)'),
-                keyboardType: TextInputType.number,
-                validator: (v) => double.tryParse(v ?? '') == null
-                    ? 'Harus berupa angka'
-                    : null,
-              ),
-              const SizedBox(height: 24),
-              FilledButton(onPressed: _save, child: const Text('Mulai')),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  try {
-                    // Ganti login/password ini sesuai akun yang kamu daftarin
-                    // lewat curl/Postman tadi.
-                    final data = await ApiClient.instance
-                        .login(login: 'gilang', password: 'rahasia123');
-                    messenger.showSnackBar(SnackBar(
-                      content: Text(
-                          'Berhasil! Login sebagai ${data['user']['name']}'),
-                      backgroundColor: Colors.green,
-                    ));
-                  } catch (e) {
-                    messenger.showSnackBar(SnackBar(
-                      content: Text('Gagal konek: $e'),
-                      backgroundColor: Colors.red,
-                    ));
-                  }
-                },
-                child: const Text('Tes Koneksi API (sementara)'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return MainNavigationScreen(userId: _localUserId!);
   }
 }

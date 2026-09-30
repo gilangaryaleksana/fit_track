@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../db/database_helper.dart';
 import '../models/models.dart';
+import '../services/sync_service.dart';
 import '../utils/activity_style.dart';
 
 class AddActivityScreen extends StatefulWidget {
@@ -65,6 +66,13 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
 
     await _db.insertActivity(activity);
 
+    // Fire-and-forget: app must keep working fully offline, so this never
+    // blocks navigation or shows an error if there's no connection.
+    SyncService.instance.syncActivity(
+      activity: activity,
+      activityTypeName: _selectedType!.name,
+    );
+
     if (mounted) Navigator.pop(context);
   }
 
@@ -81,8 +89,7 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: ConstrainedBox(
-              constraints:
-                  BoxConstraints(minHeight: constraints.maxHeight - 40),
+              constraints: BoxConstraints(minHeight: constraints.maxHeight - 40),
               child: Center(
                 child: Form(
                   key: _formKey,
@@ -116,8 +123,7 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
                                 child: Text(
                                   _selectedType?.name ?? 'Pilih jenis',
                                   style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600),
+                                      fontSize: 14, fontWeight: FontWeight.w600),
                                 ),
                               ),
                               const Icon(Icons.keyboard_arrow_down_rounded,
@@ -131,13 +137,10 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
                       TextFormField(
                         controller: _durationController,
                         keyboardType: TextInputType.number,
-                        decoration:
-                            const InputDecoration(hintText: 'contoh: 30'),
+                        decoration: const InputDecoration(hintText: 'contoh: 30'),
                         validator: (value) {
-                          if (value == null || value.isEmpty)
-                            return 'Wajib diisi';
-                          if (int.tryParse(value) == null)
-                            return 'Harus berupa angka';
+                          if (value == null || value.isEmpty) return 'Wajib diisi';
+                          if (int.tryParse(value) == null) return 'Harus berupa angka';
                           return null;
                         },
                       ),
@@ -145,8 +148,8 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
                       const _FieldLabel('Catatan (opsional)'),
                       TextFormField(
                         controller: _noteController,
-                        decoration: const InputDecoration(
-                            hintText: 'contoh: lari sore'),
+                        decoration:
+                            const InputDecoration(hintText: 'contoh: lari sore'),
                       ),
                       const SizedBox(height: 30),
                       FilledButton(

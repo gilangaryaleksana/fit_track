@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:permission_handler/permission_handler.dart';
 import '../db/database_helper.dart';
 import '../models/models.dart';
+import '../services/sync_service.dart';
 import '../services/tracking_task_handler.dart';
 import '../utils/activity_style.dart';
 
@@ -79,20 +80,25 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   Future<void> _resumeIfServiceRunning() async {
     final sessionActive =
         await FlutterForegroundTask.getData<bool>(key: 'sessionActive') ??
-            false;
+        false;
     if (!sessionActive) return;
 
     final isRunning = await FlutterForegroundTask.isRunningService;
-    final typeId =
-        await FlutterForegroundTask.getData<int>(key: 'activityTypeId');
+    final typeId = await FlutterForegroundTask.getData<int>(
+      key: 'activityTypeId',
+    );
     final seconds =
         await FlutterForegroundTask.getData<int>(key: 'accumulatedSeconds') ??
-            0;
-    final distance = await FlutterForegroundTask.getData<double>(
-            key: 'accumulatedDistance') ??
         0;
-    final movingSeconds = await FlutterForegroundTask.getData<int>(
-            key: 'accumulatedMovingSeconds') ??
+    final distance =
+        await FlutterForegroundTask.getData<double>(
+          key: 'accumulatedDistance',
+        ) ??
+        0;
+    final movingSeconds =
+        await FlutterForegroundTask.getData<int>(
+          key: 'accumulatedMovingSeconds',
+        ) ??
         0;
 
     ActivityType? matchedType;
@@ -172,12 +178,14 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       if (distance != null) _totalDistanceMeters = distance;
       if (seconds != null) _elapsed = Duration(seconds: seconds);
       if (movingSeconds != null) _movingSeconds = movingSeconds;
-      _routePoints.add(RoutePoint(
-        activityId: 0,
-        latitude: lat,
-        longitude: lng,
-        recordedAt: DateTime.now(),
-      ));
+      _routePoints.add(
+        RoutePoint(
+          activityId: 0,
+          latitude: lat,
+          longitude: lng,
+          recordedAt: DateTime.now(),
+        ),
+      );
     });
     if (_isRunning) _resyncDisplay();
     _mapController.move(latLng, _mapController.camera.zoom);
@@ -233,8 +241,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     // Background location so tracking keeps running once minimized/closed.
     final bgStatus = await Permission.locationAlways.request();
     if (!bgStatus.isGranted) {
-      setState(() => _locationError =
-          'Aktifkan izin lokasi "Allow all the time" di pengaturan HP biar tracking jalan di background');
+      setState(
+        () => _locationError =
+            'Aktifkan izin lokasi "Allow all the time" di pengaturan HP biar tracking jalan di background',
+      );
       return false;
     }
     return true;
@@ -247,13 +257,21 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     await _initForegroundTaskOptions();
 
     await FlutterForegroundTask.saveData(
-        key: 'accumulatedSeconds', value: _elapsed.inSeconds);
+      key: 'accumulatedSeconds',
+      value: _elapsed.inSeconds,
+    );
     await FlutterForegroundTask.saveData(
-        key: 'accumulatedDistance', value: _totalDistanceMeters);
+      key: 'accumulatedDistance',
+      value: _totalDistanceMeters,
+    );
     await FlutterForegroundTask.saveData(
-        key: 'accumulatedMovingSeconds', value: _movingSeconds);
+      key: 'accumulatedMovingSeconds',
+      value: _movingSeconds,
+    );
     await FlutterForegroundTask.saveData(
-        key: 'activityTypeId', value: _selectedType!.id!);
+      key: 'activityTypeId',
+      value: _selectedType!.id!,
+    );
     await FlutterForegroundTask.saveData(key: 'sessionActive', value: true);
 
     await FlutterForegroundTask.startService(
@@ -295,6 +313,14 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     if (_routePoints.isNotEmpty) {
       await _db.insertRoutePoints(activityId, _routePoints);
     }
+
+    // Fire-and-forget: app must keep working fully offline, so this never
+    // blocks navigation or shows an error if there's no connection.
+    SyncService.instance.syncActivity(
+      activity: activity,
+      activityTypeName: _selectedType!.name,
+      routePoints: _routePoints,
+    );
 
     await FlutterForegroundTask.saveData(key: 'sessionActive', value: false);
 
@@ -345,8 +371,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
         child: Column(
           children: [
             _TopBar(
-                title: _selectedType?.name ?? 'Aktivitas Langsung',
-                style: style),
+              title: _selectedType?.name ?? 'Aktivitas Langsung',
+              style: style,
+            ),
             Expanded(
               child: Stack(
                 fit: StackFit.expand,
@@ -365,43 +392,53 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                         userAgentPackageName: 'com.gilangarya.fittrack',
                       ),
                       if (_routePoints.length > 1)
-                        PolylineLayer(polylines: [
-                          Polyline(
-                            points: _routePoints
-                                .map((p) => ll.LatLng(p.latitude, p.longitude))
-                                .toList(),
-                            color: style.color,
-                            strokeWidth: 4,
-                            strokeCap: StrokeCap.round,
-                            strokeJoin: StrokeJoin.round,
-                          ),
-                        ]),
+                        PolylineLayer(
+                          polylines: [
+                            Polyline(
+                              points: _routePoints
+                                  .map(
+                                    (p) => ll.LatLng(p.latitude, p.longitude),
+                                  )
+                                  .toList(),
+                              color: style.color,
+                              strokeWidth: 4,
+                              strokeCap: StrokeCap.round,
+                              strokeJoin: StrokeJoin.round,
+                            ),
+                          ],
+                        ),
                       if (_currentLatLng != null)
-                        MarkerLayer(markers: [
-                          Marker(
-                            point: _currentLatLng!,
-                            width: 22,
-                            height: 22,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF4285F4),
-                                shape: BoxShape.circle,
-                                border:
-                                    Border.all(color: Colors.white, width: 3),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF4285F4)
-                                        .withValues(alpha: 0.3),
-                                    blurRadius: 10,
-                                    spreadRadius: 4,
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: _currentLatLng!,
+                              width: 22,
+                              height: 22,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF4285F4),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 3,
                                   ),
-                                ],
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(
+                                        0xFF4285F4,
+                                      ).withValues(alpha: 0.3),
+                                      blurRadius: 10,
+                                      spreadRadius: 4,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                        ]),
+                          ],
+                        ),
                     ],
                   ),
+
                   if (!started)
                     Positioned(
                       top: 12,
@@ -413,6 +450,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                         onTap: _pickActivityType,
                       ),
                     ),
+
                   if (_isRunning)
                     const Positioned(
                       top: 12,
@@ -420,12 +458,16 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                       right: 12,
                       child: _BackgroundActiveBadge(),
                     ),
+
                   Positioned(
                     right: 12,
                     bottom: 12,
                     child: _RoundIconButton(
-                        icon: Icons.my_location, onTap: _recenter),
+                      icon: Icons.my_location,
+                      onTap: _recenter,
+                    ),
                   ),
+
                   if (_locationError != null)
                     Container(
                       color: Colors.black.withValues(alpha: 0.55),
@@ -435,12 +477,15 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                         _locationError!,
                         textAlign: TextAlign.center,
                         style: const TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.w600),
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                 ],
               ),
             ),
+
             Container(
               padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
               decoration: const BoxDecoration(
@@ -460,8 +505,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   Row(
                     children: [
                       _Stat(
-                          label: '\u23f1 Durasi',
-                          value: _formatDuration(_displayElapsed)),
+                        label: '\u23f1 Durasi',
+                        value: _formatDuration(_displayElapsed),
+                      ),
                       const _StatDivider(),
                       _Stat(label: '\u26a1 Pace', value: _paceLabel),
                       const _StatDivider(),
@@ -476,7 +522,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 4),
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF5F7FA),
                         borderRadius: BorderRadius.circular(12),
@@ -514,8 +562,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed:
-                                _saving ? null : (_isRunning ? _pause : _start),
+                            onPressed: _saving
+                                ? null
+                                : (_isRunning ? _pause : _start),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               side: const BorderSide(color: Color(0xFFE4EAE9)),
@@ -536,7 +585,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                                     height: 18,
                                     width: 18,
                                     child: CircularProgressIndicator(
-                                        color: Colors.white, strokeWidth: 2),
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : const Text('Selesai & Simpan'),
                           ),
@@ -584,7 +635,9 @@ class _TopBar extends StatelessWidget {
                     textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w700),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
@@ -601,8 +654,11 @@ class _TypePill extends StatelessWidget {
   final ActivityStyle style;
   final String name;
   final VoidCallback onTap;
-  const _TypePill(
-      {required this.style, required this.name, required this.onTap});
+  const _TypePill({
+    required this.style,
+    required this.name,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -625,12 +681,18 @@ class _TypePill extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(name,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 13)),
+                child: Text(
+                  name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
               ),
-              const Icon(Icons.keyboard_arrow_down_rounded,
-                  color: Color(0xFFB7C2C0)),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: Color(0xFFB7C2C0),
+              ),
             ],
           ),
         ),
@@ -657,8 +719,10 @@ class _BackgroundActiveBadge extends StatelessWidget {
           children: [
             Icon(Icons.notifications_active, color: Colors.white, size: 13),
             SizedBox(width: 6),
-            Text('Tetap tracking walau app ditutup',
-                style: TextStyle(color: Colors.white, fontSize: 11)),
+            Text(
+              'Tetap tracking walau app ditutup',
+              style: TextStyle(color: Colors.white, fontSize: 11),
+            ),
           ],
         ),
       ),
@@ -700,12 +764,15 @@ class _Stat extends StatelessWidget {
     return Expanded(
       child: Column(
         children: [
-          Text(label,
-              style: const TextStyle(fontSize: 10.5, color: Color(0xFF5B6B69))),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 10.5, color: Color(0xFF5B6B69)),
+          ),
           const SizedBox(height: 4),
-          Text(value,
-              style:
-                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
         ],
       ),
     );
@@ -752,8 +819,10 @@ class _ActivityTypeSheet extends StatelessWidget {
                 onTap: () => Navigator.pop(context, type),
                 child: Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   color: selected?.id == type.id
                       ? const Color(0xFFEAF7F6)
                       : Colors.transparent,
@@ -761,9 +830,9 @@ class _ActivityTypeSheet extends StatelessWidget {
                     children: [
                       CircleAvatar(
                         radius: 16,
-                        backgroundColor: styleForActivity(type.name)
-                            .color
-                            .withValues(alpha: 0.15),
+                        backgroundColor: styleForActivity(
+                          type.name,
+                        ).color.withValues(alpha: 0.15),
                         child: Icon(
                           styleForActivity(type.name).icon,
                           color: styleForActivity(type.name).color,
@@ -771,9 +840,13 @@ class _ActivityTypeSheet extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Text(type.name,
-                          style: const TextStyle(
-                              fontSize: 13.5, fontWeight: FontWeight.w600)),
+                      Text(
+                        type.name,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
