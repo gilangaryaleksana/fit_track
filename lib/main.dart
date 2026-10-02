@@ -6,6 +6,7 @@ import 'models/models.dart';
 import 'screens/auth_screen.dart';
 import 'screens/main_navigation_screen.dart';
 import 'services/api_client.dart';
+import 'services/pull_sync_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -95,6 +96,12 @@ class _StartupScreenState extends State<StartupScreen> {
       _localUserId = localUser?.id;
       _loading = false;
     });
+
+    // Non-blocking: pick up anything added from another device. The local
+    // data we already have is shown immediately either way.
+    if (localUser != null) {
+      PullSyncService.instance.pullActivities(localUser.id!);
+    }
   }
 
   @override

@@ -20,7 +20,7 @@ class ApiClient {
 
   // TODO: ganti sesuai IP laptop kamu (cek lewat ipconfig / ifconfig).
   // Harus sejaringan WiFi yang sama dengan HP saat testing.
-  static const String baseUrl = 'http://192.168.1.11:8000/api';
+  static const String baseUrl = 'http://192.168.1.12:8000/api';
 
   String? _token;
 

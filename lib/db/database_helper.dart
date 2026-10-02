@@ -17,7 +17,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'health_tracker.db');
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -26,6 +26,19 @@ class DatabaseHelper {
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _createRoutePointsTable(db);
+    }
+    if (oldVersion < 3) {
+      await _addServerIdColumn(db);
+    }
+  }
+
+  /// Marks which backend activity a local row was created from (or synced
+  /// to), so pulling history after a reinstall doesn't create duplicates.
+  Future<void> _addServerIdColumn(Database db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(activities)');
+    final hasColumn = columns.any((c) => c['name'] == 'server_id');
+    if (!hasColumn) {
+      await db.execute('ALTER TABLE activities ADD COLUMN server_id INTEGER');
     }
   }
 
@@ -70,6 +83,7 @@ class DatabaseHelper {
         calories_burned REAL NOT NULL,
         date TEXT NOT NULL,
         note TEXT,
+        server_id INTEGER,
         FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
         FOREIGN KEY (activity_type_id) REFERENCES activity_types (id)
       )
@@ -135,6 +149,27 @@ class DatabaseHelper {
   Future<int> insertActivity(Activity activity) async {
     final db = await database;
     return db.insert('activities', activity.toMap()..remove('id'));
+  }
+
+  /// Finds the local row already synced from a given backend activity id,
+  /// if any — used so pulling history never creates duplicates.
+  Future<int?> getLocalIdByServerId(int serverId) async {
+    final db = await database;
+    final result = await db.query(
+      'activities',
+      columns: ['id'],
+      where: 'server_id = ?',
+      whereArgs: [serverId],
+    );
+    if (result.isEmpty) return null;
+    return result.first['id'] as int;
+  }
+
+  Future<int> insertActivityFromServer(Activity activity, int serverId) async {
+    final db = await database;
+    final map = activity.toMap()..remove('id');
+    map['server_id'] = serverId;
+    return db.insert('activities', map);
   }
 
   Future<int> updateActivity(Activity activity) async {

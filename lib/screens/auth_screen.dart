@@ -4,6 +4,7 @@ import '../db/database_helper.dart';
 import '../main.dart' show kLocalUserIdKey;
 import '../models/models.dart';
 import '../services/api_client.dart';
+import '../services/pull_sync_service.dart';
 import 'main_navigation_screen.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -44,8 +45,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.fitness_center,
-                      color: Colors.white, size: 26),
+                  child: const Icon(Icons.fitness_center, color: Colors.white, size: 26),
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -101,6 +101,10 @@ Future<void> _enterAppWithServerUser(
 
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt(kLocalUserIdKey, localId);
+
+  // Restore history from the server (no-op if there's nothing to pull,
+  // e.g. a brand-new account or no connection).
+  await PullSyncService.instance.pullActivities(localId);
 
   if (!context.mounted) return;
   Navigator.of(context).pushAndRemoveUntil(
@@ -162,9 +166,7 @@ class _StyledTextFieldState extends State<_StyledTextField> {
           child: Text(
             widget.label,
             style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF5B6B69)),
+                fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF5B6B69)),
           ),
         ),
         Container(
@@ -173,8 +175,7 @@ class _StyledTextFieldState extends State<_StyledTextField> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color:
-                  isFocused ? const Color(0xFF2EC4B6) : const Color(0xFFE4EAE9),
+              color: isFocused ? const Color(0xFF2EC4B6) : const Color(0xFFE4EAE9),
               width: 1.5,
             ),
           ),
@@ -182,10 +183,8 @@ class _StyledTextFieldState extends State<_StyledTextField> {
             children: [
               CircleAvatar(
                 radius: 15,
-                backgroundColor:
-                    const Color(0xFF2EC4B6).withValues(alpha: 0.12),
-                child:
-                    Icon(widget.icon, size: 14, color: const Color(0xFF1B9AAA)),
+                backgroundColor: const Color(0xFF2EC4B6).withValues(alpha: 0.12),
+                child: Icon(widget.icon, size: 14, color: const Color(0xFF1B9AAA)),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -209,9 +208,7 @@ class _StyledTextFieldState extends State<_StyledTextField> {
                 GestureDetector(
                   onTap: () => setState(() => _obscured = !_obscured),
                   child: Icon(
-                    _obscured
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
+                    _obscured ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                     size: 16,
                     color: const Color(0xFFB7C2C0),
                   ),
@@ -251,8 +248,7 @@ class _LoginFormState extends State<_LoginForm> {
         password: _passwordController.text,
       );
       if (!mounted) return;
-      await _enterAppWithServerUser(
-          context, data['user'] as Map<String, dynamic>);
+      await _enterAppWithServerUser(context, data['user'] as Map<String, dynamic>);
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -285,20 +281,17 @@ class _LoginFormState extends State<_LoginForm> {
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
-            Text(_error!,
-                style: const TextStyle(color: Colors.red, fontSize: 12.5)),
+            Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 12.5)),
           ],
           const SizedBox(height: 20),
           FilledButton(
             onPressed: _submitting ? null : _submit,
-            style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF2EC4B6)),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF2EC4B6)),
             child: _submitting
                 ? const SizedBox(
                     height: 20,
                     width: 20,
-                    child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2),
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                   )
                 : const Text('Masuk'),
           ),
@@ -406,8 +399,7 @@ class _RegisterFormState extends State<_RegisterForm> {
                   icon: Icons.straighten,
                   hint: '170',
                   keyboardType: TextInputType.number,
-                  validator: (v) =>
-                      double.tryParse(v ?? '') == null ? 'Angka' : null,
+                  validator: (v) => double.tryParse(v ?? '') == null ? 'Angka' : null,
                 ),
               ),
               const SizedBox(width: 12),
@@ -418,28 +410,24 @@ class _RegisterFormState extends State<_RegisterForm> {
                   icon: Icons.monitor_weight_outlined,
                   hint: '65',
                   keyboardType: TextInputType.number,
-                  validator: (v) =>
-                      double.tryParse(v ?? '') == null ? 'Angka' : null,
+                  validator: (v) => double.tryParse(v ?? '') == null ? 'Angka' : null,
                 ),
               ),
             ],
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
-            Text(_error!,
-                style: const TextStyle(color: Colors.red, fontSize: 12.5)),
+            Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 12.5)),
           ],
           const SizedBox(height: 20),
           FilledButton(
             onPressed: _submitting ? null : _submit,
-            style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF2EC4B6)),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF2EC4B6)),
             child: _submitting
                 ? const SizedBox(
                     height: 20,
                     width: 20,
-                    child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2),
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                   )
                 : const Text('Daftar'),
           ),
