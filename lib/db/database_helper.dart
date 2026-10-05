@@ -184,7 +184,16 @@ class DatabaseHelper {
 
   Future<int> deleteActivity(int id) async {
     final db = await database;
+    await db.delete('route_points', where: 'activity_id = ?', whereArgs: [id]);
     return db.delete('activities', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int?> getActivityServerId(int id) async {
+    final db = await database;
+    final result =
+        await db.query('activities', columns: ['server_id'], where: 'id = ?', whereArgs: [id]);
+    if (result.isEmpty) return null;
+    return result.first['server_id'] as int?;
   }
 
   Future<List<Activity>> getActivitiesByUser(int userId) async {

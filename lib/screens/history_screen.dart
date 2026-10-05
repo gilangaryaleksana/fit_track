@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../db/database_helper.dart';
 import '../models/models.dart';
 import '../utils/activity_style.dart';
+import 'activity_detail_screen.dart';
 
 /// Tab body — no own Scaffold/AppBar, rendered inside MainNavigationScreen.
 class HistoryScreen extends StatefulWidget {
@@ -61,13 +62,24 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ),
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 20),
-                  margin:
-                      const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                  margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
                   child: const Icon(Icons.delete, color: Colors.white),
                 ),
                 onDismissed: (_) => _delete(activity.id!),
                 child: Card(
                   child: ListTile(
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ActivityDetailScreen(
+                            activity: activity,
+                            type: type,
+                          ),
+                        ),
+                      );
+                      _loadData();
+                    },
                     leading: CircleAvatar(
                       backgroundColor: style.color.withValues(alpha: 0.15),
                       child: Icon(style.icon, color: style.color),
@@ -77,8 +89,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         '${activity.durationMinutes} menit \u2022 ${dateFormat.format(activity.date)}'),
                     trailing: Text(
                       '${activity.caloriesBurned.toStringAsFixed(0)} kcal',
-                      style: TextStyle(
-                          color: style.color, fontWeight: FontWeight.bold),
+                      style:
+                          TextStyle(color: style.color, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
