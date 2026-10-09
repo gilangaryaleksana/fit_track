@@ -3,6 +3,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import '../db/database_helper.dart';
 import '../models/models.dart';
 import '../utils/activity_style.dart';
+import 'activity_type_picker_screen.dart';
 import 'add_activity_screen.dart';
 import 'live_tracking_screen.dart';
 
@@ -249,9 +250,16 @@ class HomeScreenState extends State<HomeScreen> {
 
           if (!mounted || choice == null) return;
 
-          final target = choice == 'live'
-              ? LiveTrackingScreen(userId: widget.userId)
-              : AddActivityScreen(userId: widget.userId);
+          // A running/paused session is resumed directly; otherwise start
+          // the 2-step flow (pick a type, then track).
+          final Widget target;
+          if (choice == 'live') {
+            target = _ongoingSession != null
+                ? LiveTrackingScreen(userId: widget.userId)
+                : ActivityTypePickerScreen(userId: widget.userId);
+          } else {
+            target = AddActivityScreen(userId: widget.userId);
+          }
 
           await Navigator.push(
             context,

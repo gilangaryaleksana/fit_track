@@ -8,11 +8,18 @@ const _movementThresholdMetersPerSecond = 0.5;
 
 /// Runs in a background isolate kept alive by the Android foreground
 /// service, so it keeps working even after the app is closed/minimized.
+///
+/// Two modes, chosen by the screen via the saved `usesGps` flag:
+/// - GPS (outdoor): distance + movement-based active time.
+/// - No GPS (swimming, yoga, gym): no location access at all; every tick
+///   counts as active time, so calories become duration-based.
 class TrackingTaskHandler extends TaskHandler {
   Position? _lastPosition;
   double _distanceMeters = 0;
   int _accumulatedSeconds = 0;
   int _movingSeconds = 0;
+  bool _useGps = true;
+  String _typeName = 'Aktivitas';
   DateTime? _tickStart;
   DateTime? _lastTickTime;
 
@@ -27,6 +34,11 @@ class TrackingTaskHandler extends TaskHandler {
     _movingSeconds = (await FlutterForegroundTask.getData<int>(
             key: 'accumulatedMovingSeconds')) ??
         0;
+    _useGps =
+        (await FlutterForegroundTask.getData<bool>(key: 'usesGps')) ?? true;
+    _typeName = (await FlutterForegroundTask.getData<String>(
+            key: 'activityTypeName')) ??
+        'Aktivitas';
     _tickStart = timestamp;
     _lastTickTime = timestamp;
   }
@@ -34,31 +46,37 @@ class TrackingTaskHandler extends TaskHandler {
   @override
   void onRepeatEvent(DateTime timestamp) async {
     try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings:
-            const LocationSettings(accuracy: LocationAccuracy.high),
-      );
-
       final tickSeconds =
           timestamp.difference(_lastTickTime ?? timestamp).inSeconds;
 
-      if (_lastPosition != null) {
-        final deltaMeters = Geolocator.distanceBetween(
-          _lastPosition!.latitude,
-          _lastPosition!.longitude,
-          position.latitude,
-          position.longitude,
+      Position? position;
+      if (_useGps) {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings:
+              const LocationSettings(accuracy: LocationAccuracy.high),
         );
-        _distanceMeters += deltaMeters;
 
-        // Only count this tick as "moving" if speed is above the noise
-        // threshold, so standing still doesn't keep burning calories.
-        final speed = tickSeconds > 0 ? deltaMeters / tickSeconds : 0;
-        if (speed >= _movementThresholdMetersPerSecond) {
-          _movingSeconds += tickSeconds;
+        if (_lastPosition != null) {
+          final deltaMeters = Geolocator.distanceBetween(
+            _lastPosition!.latitude,
+            _lastPosition!.longitude,
+            position.latitude,
+            position.longitude,
+          );
+          _distanceMeters += deltaMeters;
+
+          // Only count this tick as "moving" if speed is above the noise
+          // threshold, so standing still doesn't keep burning calories.
+          final speed = tickSeconds > 0 ? deltaMeters / tickSeconds : 0;
+          if (speed >= _movementThresholdMetersPerSecond) {
+            _movingSeconds += tickSeconds;
+          }
         }
+        _lastPosition = position;
+      } else {
+        // Nothing to detect movement with, so all elapsed time counts.
+        _movingSeconds += tickSeconds;
       }
-      _lastPosition = position;
       _lastTickTime = timestamp;
 
       final elapsedSeconds =
@@ -73,15 +91,17 @@ class TrackingTaskHandler extends TaskHandler {
       await FlutterForegroundTask.saveData(
           key: 'accumulatedMovingSeconds', value: _movingSeconds);
 
+      final durationText = _formatDuration(elapsedSeconds);
       FlutterForegroundTask.updateService(
-        notificationTitle: 'FitTrack \u2014 Aktivitas berlangsung',
-        notificationText:
-            '${_formatDuration(elapsedSeconds)} \u2022 ${(_distanceMeters / 1000).toStringAsFixed(2)} km',
+        notificationTitle: 'FitTrack \u2014 $_typeName berlangsung',
+        notificationText: _useGps
+            ? '$durationText \u2022 ${(_distanceMeters / 1000).toStringAsFixed(2)} km'
+            : durationText,
       );
 
       FlutterForegroundTask.sendDataToMain({
-        'lat': position.latitude,
-        'lng': position.longitude,
+        if (position != null) 'lat': position.latitude,
+        if (position != null) 'lng': position.longitude,
         'distanceMeters': _distanceMeters,
         'elapsedSeconds': elapsedSeconds,
         'movingSeconds': _movingSeconds,

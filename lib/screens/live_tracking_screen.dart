@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart' hide ActivityType;
+import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:permission_handler/permission_handler.dart';
 import '../db/database_helper.dart';
@@ -10,12 +12,24 @@ import '../models/models.dart';
 import '../services/sync_service.dart';
 import '../services/tracking_task_handler.dart';
 import '../utils/activity_style.dart';
+import '../widgets/step_indicator.dart';
 
 const _cartoKey = 'cb1_3xnq_1_d5f34b66a55d20c44f8bb363';
 
+/// Step 2 of "Aktivitas Langsung". The layout depends on the activity type:
+/// outdoor types get a live map + GPS, the rest get a big centered timer.
+///
+/// Pops with `true` when the whole flow should close (activity saved, or a
+/// session is in progress in the background) and `false` when the user just
+/// backs out before starting, so they can change the type on step 1.
 class LiveTrackingScreen extends StatefulWidget {
   final int userId;
-  const LiveTrackingScreen({super.key, required this.userId});
+
+  /// Type picked on step 1. Null when re-opening an already running/paused
+  /// session (e.g. from the Home banner) — it's restored from storage then.
+  final ActivityType? initialType;
+
+  const LiveTrackingScreen({super.key, required this.userId, this.initialType});
 
   @override
   State<LiveTrackingScreen> createState() => _LiveTrackingScreenState();
@@ -26,18 +40,31 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   final _noteController = TextEditingController();
   final _mapController = MapController();
 
-  List<ActivityType> _types = [];
   ActivityType? _selectedType;
+  bool _ready = false;
 
   Duration _elapsed = Duration.zero;
   bool _isRunning = false;
   bool _saving = false;
+  DateTime? _startedAt;
 
   // Drives smooth per-second UI updates between the background service's
   // 3-second sync ticks, so the displayed clock doesn't jump by 3s at a time.
   Timer? _uiTicker;
   Duration _displayBaseElapsed = Duration.zero;
   DateTime? _displayBaseAt;
+
+  final List<RoutePoint> _routePoints = [];
+  ll.LatLng? _currentLatLng;
+  double _totalDistanceMeters = 0;
+  int _movingSeconds = 0;
+  String? _locationError;
+
+  bool get _usesMap => _selectedType == null
+      ? true
+      : styleForActivity(_selectedType!.name).usesMap;
+
+  bool get _hasProgress => _elapsed > Duration.zero || _isRunning;
 
   Duration get _displayElapsed {
     if (!_isRunning || _displayBaseAt == null) return _elapsed;
@@ -63,46 +90,56 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     _elapsed = _displayElapsed;
   }
 
-  final List<RoutePoint> _routePoints = [];
-  ll.LatLng? _currentLatLng;
-  double _totalDistanceMeters = 0;
-  int _movingSeconds = 0;
-  String? _locationError;
-
   @override
   void initState() {
     super.initState();
-    _loadTypes().then((_) => _resumeIfServiceRunning());
-    _initOneShotLocation();
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+    _init();
   }
 
-  Future<void> _resumeIfServiceRunning() async {
+  Future<void> _init() async {
+    final types = await _db.getActivityTypes();
+
+    if (widget.initialType != null) {
+      for (final t in types) {
+        if (t.id == widget.initialType!.id) {
+          _selectedType = t;
+          break;
+        }
+      }
+    }
+
+    await _resumeIfServiceRunning(types);
+    if (!mounted) return;
+
+    setState(() {
+      _selectedType ??= types.isNotEmpty ? types.first : null;
+      _ready = true;
+    });
+
+    // Only outdoor types need the location (and its permission) up front.
+    if (_usesMap) _initOneShotLocation();
+  }
+
+  Future<void> _resumeIfServiceRunning(List<ActivityType> types) async {
     final sessionActive =
-        await FlutterForegroundTask.getData<bool>(key: 'sessionActive') ??
-        false;
+        await FlutterForegroundTask.getData<bool>(key: 'sessionActive') ?? false;
     if (!sessionActive) return;
 
     final isRunning = await FlutterForegroundTask.isRunningService;
-    final typeId = await FlutterForegroundTask.getData<int>(
-      key: 'activityTypeId',
-    );
+    final typeId = await FlutterForegroundTask.getData<int>(key: 'activityTypeId');
     final seconds =
-        await FlutterForegroundTask.getData<int>(key: 'accumulatedSeconds') ??
-        0;
+        await FlutterForegroundTask.getData<int>(key: 'accumulatedSeconds') ?? 0;
     final distance =
-        await FlutterForegroundTask.getData<double>(
-          key: 'accumulatedDistance',
-        ) ??
+        await FlutterForegroundTask.getData<double>(key: 'accumulatedDistance') ?? 0;
+    final movingSeconds = await FlutterForegroundTask.getData<int>(
+            key: 'accumulatedMovingSeconds') ??
         0;
-    final movingSeconds =
-        await FlutterForegroundTask.getData<int>(
-          key: 'accumulatedMovingSeconds',
-        ) ??
-        0;
+    final startedAtRaw =
+        await FlutterForegroundTask.getData<String>(key: 'sessionStartedAt');
 
     ActivityType? matchedType;
-    for (final t in _types) {
+    for (final t in types) {
       if (t.id == typeId) {
         matchedType = t;
         break;
@@ -115,17 +152,19 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       _elapsed = Duration(seconds: seconds);
       _totalDistanceMeters = distance;
       _movingSeconds = movingSeconds;
+      _startedAt = startedAtRaw != null ? DateTime.tryParse(startedAtRaw) : null;
       _isRunning = isRunning;
     });
     if (isRunning) _startUiTicker();
   }
 
-  Future<void> _loadTypes() async {
-    final types = await _db.getActivityTypes();
-    setState(() {
-      _types = types;
-      _selectedType = types.isNotEmpty ? types.first : null;
-    });
+  void _moveMap(ll.LatLng target, [double? zoom]) {
+    if (!_ready || !_usesMap) return;
+    try {
+      _mapController.move(target, zoom ?? _mapController.camera.zoom);
+    } catch (_) {
+      // Map isn't attached yet; the next update will move it.
+    }
   }
 
   Future<bool> _ensureForegroundLocationPermission() async {
@@ -154,45 +193,45 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     if (!granted) return;
     try {
       final current = await Geolocator.getCurrentPosition();
+      if (!mounted) return;
       final latLng = ll.LatLng(current.latitude, current.longitude);
       setState(() => _currentLatLng = latLng);
-      _mapController.move(latLng, 17);
+      _moveMap(latLng, 17);
     } catch (_) {
       // no fix yet, ignore
     }
   }
 
   void _onReceiveTaskData(Object data) {
-    if (data is! Map) return;
+    if (data is! Map || !mounted) return;
     final lat = data['lat'] as double?;
     final lng = data['lng'] as double?;
     final distance = data['distanceMeters'] as double?;
     final seconds = data['elapsedSeconds'] as int?;
     final movingSeconds = data['movingSeconds'] as int?;
 
-    if (lat == null || lng == null) return;
-    final latLng = ll.LatLng(lat, lng);
-
     setState(() {
-      _currentLatLng = latLng;
-      if (distance != null) _totalDistanceMeters = distance;
-      if (seconds != null) _elapsed = Duration(seconds: seconds);
-      if (movingSeconds != null) _movingSeconds = movingSeconds;
-      _routePoints.add(
-        RoutePoint(
+      // No lat/lng when the service runs without GPS (indoor types).
+      if (lat != null && lng != null) {
+        _currentLatLng = ll.LatLng(lat, lng);
+        _routePoints.add(RoutePoint(
           activityId: 0,
           latitude: lat,
           longitude: lng,
           recordedAt: DateTime.now(),
-        ),
-      );
+        ));
+      }
+      if (distance != null) _totalDistanceMeters = distance;
+      if (seconds != null) _elapsed = Duration(seconds: seconds);
+      if (movingSeconds != null) _movingSeconds = movingSeconds;
     });
+
     if (_isRunning) _resyncDisplay();
-    _mapController.move(latLng, _mapController.camera.zoom);
+    if (lat != null && lng != null) _moveMap(ll.LatLng(lat, lng));
   }
 
-  /// Movement-based: only the time spent actually moving (per GPS) counts
-  /// toward calories, so standing still no longer burns anything.
+  /// Outdoor: movement-based (only time spent actually moving counts).
+  /// Indoor: the service counts all elapsed time, so it's duration-based.
   double get _liveCalories {
     if (_selectedType == null) return 0;
     final minutes = _movingSeconds / 60;
@@ -214,8 +253,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'fittrack_tracking',
         channelName: 'Tracking Aktivitas',
-        channelDescription:
-            'Menampilkan status aktivitas yang sedang berlangsung',
+        channelDescription: 'Menampilkan status aktivitas yang sedang berlangsung',
         onlyAlertOnce: true,
       ),
       iosNotificationOptions: const IOSNotificationOptions(),
@@ -228,55 +266,55 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     );
   }
 
-  Future<bool> _ensureBackgroundPermissions() async {
-    final foregroundOk = await _ensureForegroundLocationPermission();
-    if (!foregroundOk) return false;
-
-    final notifPermission =
-        await FlutterForegroundTask.checkNotificationPermission();
+  Future<bool> _ensurePermissions() async {
+    final notifPermission = await FlutterForegroundTask.checkNotificationPermission();
     if (notifPermission != NotificationPermission.granted) {
       await FlutterForegroundTask.requestNotificationPermission();
     }
 
+    // Indoor types never touch location, so there's nothing else to ask.
+    if (!_usesMap) return true;
+
+    final foregroundOk = await _ensureForegroundLocationPermission();
+    if (!foregroundOk) return false;
+
     // Background location so tracking keeps running once minimized/closed.
     final bgStatus = await Permission.locationAlways.request();
     if (!bgStatus.isGranted) {
-      setState(
-        () => _locationError =
-            'Aktifkan izin lokasi "Allow all the time" di pengaturan HP biar tracking jalan di background',
-      );
+      setState(() => _locationError =
+          'Aktifkan izin lokasi "Allow all the time" di pengaturan HP biar tracking jalan di background');
       return false;
     }
     return true;
   }
 
   Future<void> _start() async {
-    final granted = await _ensureBackgroundPermissions();
+    if (_selectedType == null) return;
+    final granted = await _ensurePermissions();
     if (!granted) return;
 
     await _initForegroundTaskOptions();
 
+    _startedAt ??= DateTime.now();
+
     await FlutterForegroundTask.saveData(
-      key: 'accumulatedSeconds',
-      value: _elapsed.inSeconds,
-    );
+        key: 'accumulatedSeconds', value: _elapsed.inSeconds);
     await FlutterForegroundTask.saveData(
-      key: 'accumulatedDistance',
-      value: _totalDistanceMeters,
-    );
+        key: 'accumulatedDistance', value: _totalDistanceMeters);
     await FlutterForegroundTask.saveData(
-      key: 'accumulatedMovingSeconds',
-      value: _movingSeconds,
-    );
+        key: 'accumulatedMovingSeconds', value: _movingSeconds);
     await FlutterForegroundTask.saveData(
-      key: 'activityTypeId',
-      value: _selectedType!.id!,
-    );
+        key: 'activityTypeId', value: _selectedType!.id!);
+    await FlutterForegroundTask.saveData(
+        key: 'activityTypeName', value: _selectedType!.name);
+    await FlutterForegroundTask.saveData(key: 'usesGps', value: _usesMap);
+    await FlutterForegroundTask.saveData(
+        key: 'sessionStartedAt', value: _startedAt!.toIso8601String());
     await FlutterForegroundTask.saveData(key: 'sessionActive', value: true);
 
     await FlutterForegroundTask.startService(
-      notificationTitle: 'FitTrack \u2014 Aktivitas berlangsung',
-      notificationText: 'Menyiapkan GPS...',
+      notificationTitle: 'FitTrack \u2014 ${_selectedType!.name} berlangsung',
+      notificationText: _usesMap ? 'Menyiapkan GPS...' : 'Timer berjalan',
       callback: startTrackingCallback,
     );
 
@@ -305,7 +343,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       activityTypeId: _selectedType!.id!,
       durationMinutes: durationMinutes,
       caloriesBurned: _liveCalories,
-      date: DateTime.now(),
+      date: _startedAt ?? DateTime.now(),
       note: _noteController.text.isEmpty ? null : _noteController.text,
     );
 
@@ -324,23 +362,13 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
 
     await FlutterForegroundTask.saveData(key: 'sessionActive', value: false);
 
-    if (mounted) Navigator.pop(context);
+    if (mounted) Navigator.pop(context, true);
   }
+
+  void _leave() => Navigator.pop(context, _hasProgress);
 
   void _recenter() {
-    if (_currentLatLng != null) {
-      _mapController.move(_currentLatLng!, 17);
-    }
-  }
-
-  Future<void> _pickActivityType() async {
-    final result = await showModalBottomSheet<ActivityType>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) =>
-          _ActivityTypeSheet(types: _types, selected: _selectedType),
-    );
-    if (result != null) setState(() => _selectedType = result);
+    if (_currentLatLng != null) _moveMap(_currentLatLng!, 17);
   }
 
   String _formatDuration(Duration d) {
@@ -360,245 +388,349 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_ready) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     final style = _selectedType != null
         ? styleForActivity(_selectedType!.name)
         : const ActivityStyle(Icons.sports, Colors.teal);
+    final started = _hasProgress;
 
-    final started = _elapsed > Duration.zero || _isRunning;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _leave();
+      },
+      child: Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              _TopBar(
+                title: _selectedType?.name ?? 'Aktivitas Langsung',
+                style: style,
+                onBack: _leave,
+              ),
+              Expanded(
+                child: _usesMap
+                    ? _buildMapArea(style, started)
+                    : _buildFocusArea(style, started),
+              ),
+              _buildBottomPanel(style, started),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
+  // ---------- Outdoor: map ----------
+
+  Widget _buildMapArea(ActivityStyle style, bool started) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        FlutterMap(
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: _currentLatLng ?? const ll.LatLng(-6.2, 106.816),
+            initialZoom: 16,
+          ),
           children: [
-            _TopBar(
-              title: _selectedType?.name ?? 'Aktivitas Langsung',
-              style: style,
+            TileLayer(
+              urlTemplate:
+                  'https://basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}.png?key=$_cartoKey',
+              userAgentPackageName: 'com.gilangarya.fittrack',
             ),
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  FlutterMap(
-                    mapController: _mapController,
-                    options: MapOptions(
-                      initialCenter:
-                          _currentLatLng ?? const ll.LatLng(-6.2, 106.816),
-                      initialZoom: 16,
-                    ),
-                    children: [
-                      TileLayer(
-                        urlTemplate:
-                            'https://basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}.png?key=$_cartoKey',
-                        userAgentPackageName: 'com.gilangarya.fittrack',
-                      ),
-                      if (_routePoints.length > 1)
-                        PolylineLayer(
-                          polylines: [
-                            Polyline(
-                              points: _routePoints
-                                  .map(
-                                    (p) => ll.LatLng(p.latitude, p.longitude),
-                                  )
-                                  .toList(),
-                              color: style.color,
-                              strokeWidth: 4,
-                              strokeCap: StrokeCap.round,
-                              strokeJoin: StrokeJoin.round,
-                            ),
-                          ],
+            if (_routePoints.length > 1)
+              PolylineLayer(polylines: [
+                Polyline(
+                  points: _routePoints
+                      .map((p) => ll.LatLng(p.latitude, p.longitude))
+                      .toList(),
+                  color: style.color,
+                  strokeWidth: 4,
+                  strokeCap: StrokeCap.round,
+                  strokeJoin: StrokeJoin.round,
+                ),
+              ]),
+            if (_currentLatLng != null)
+              MarkerLayer(markers: [
+                Marker(
+                  point: _currentLatLng!,
+                  width: 22,
+                  height: 22,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4285F4),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 3),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF4285F4).withValues(alpha: 0.3),
+                          blurRadius: 10,
+                          spreadRadius: 4,
                         ),
-                      if (_currentLatLng != null)
-                        MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: _currentLatLng!,
-                              width: 22,
-                              height: 22,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF4285F4),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 3,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(
-                                        0xFF4285F4,
-                                      ).withValues(alpha: 0.3),
-                                      blurRadius: 10,
-                                      spreadRadius: 4,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-
-                  if (!started)
-                    Positioned(
-                      top: 12,
-                      left: 12,
-                      right: 12,
-                      child: _TypePill(
-                        style: style,
-                        name: _selectedType?.name ?? 'Pilih jenis',
-                        onTap: _pickActivityType,
-                      ),
-                    ),
-
-                  if (_isRunning)
-                    const Positioned(
-                      top: 12,
-                      left: 12,
-                      right: 12,
-                      child: _BackgroundActiveBadge(),
-                    ),
-
-                  Positioned(
-                    right: 12,
-                    bottom: 12,
-                    child: _RoundIconButton(
-                      icon: Icons.my_location,
-                      onTap: _recenter,
+                      ],
                     ),
                   ),
+                ),
+              ]),
+          ],
+        ),
 
-                  if (_locationError != null)
-                    Container(
-                      color: Colors.black.withValues(alpha: 0.55),
-                      alignment: Alignment.center,
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Text(
-                        _locationError!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+        // Locked: the type was chosen on step 1.
+        if (!started)
+          Positioned(
+            top: 12,
+            left: 12,
+            child: _TypePill(style: style, name: _selectedType?.name ?? ''),
+          ),
+
+        if (_isRunning)
+          const Positioned(
+            top: 12,
+            left: 12,
+            right: 12,
+            child: _BackgroundActiveBadge(),
+          ),
+
+        Positioned(
+          right: 12,
+          bottom: 12,
+          child: _RoundIconButton(icon: Icons.my_location, onTap: _recenter),
+        ),
+
+        if (_locationError != null)
+          Container(
+            color: Colors.black.withValues(alpha: 0.55),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              _locationError!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
             ),
+          ),
+      ],
+    );
+  }
 
-            Container(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x14142020),
-                    blurRadius: 24,
-                    offset: Offset(0, -10),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      _Stat(
-                        label: '\u23f1 Durasi',
-                        value: _formatDuration(_displayElapsed),
-                      ),
-                      const _StatDivider(),
-                      _Stat(label: '\u26a1 Pace', value: _paceLabel),
-                      const _StatDivider(),
-                      _Stat(
-                        label: '\ud83d\udd25 Kalori',
-                        value: _liveCalories.toStringAsFixed(0),
-                      ),
-                    ],
-                  ),
-                  if (!_isRunning && started) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF5F7FA),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE4EAE9)),
-                      ),
-                      child: TextField(
-                        controller: _noteController,
-                        style: const TextStyle(fontSize: 12.5),
-                        decoration: const InputDecoration(
-                          hintText: 'Catatan (opsional)',
-                          hintStyle: TextStyle(color: Color(0xFF5B6B69)),
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
+  // ---------- Indoor: time focus ----------
+
+  Widget _buildFocusArea(ActivityStyle style, bool started) {
+    final elapsed = _displayElapsed;
+    final progress = started ? (elapsed.inSeconds % 60) / 60 : 0.0;
+    final rate = _selectedType?.caloriesPerMinute ?? 0;
+    final rateText = rate % 1 == 0 ? rate.toStringAsFixed(0) : rate.toStringAsFixed(1);
+
+    final Color? dotColor = _isRunning
+        ? const Color(0xFF4ADE80)
+        : (started ? const Color(0xFFFBBF24) : null);
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          center: const Alignment(0, -0.2),
+          radius: 0.9,
+          colors: [style.color.withValues(alpha: 0.10), Colors.transparent],
+        ),
+      ),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _FocusTypeChip(style: style, name: _selectedType?.name ?? ''),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: 220,
+                height: 220,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CustomPaint(
+                      size: const Size(220, 220),
+                      painter: _RingPainter(progress: progress, color: style.color),
                     ),
-                  ],
-                  const SizedBox(height: 14),
-                  if (!started)
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: _saving ? null : _start,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF4285F4),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        icon: const Icon(Icons.play_arrow_rounded),
-                        label: const Text('Mulai'),
-                      ),
-                    )
-                  else
-                    Row(
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _saving
-                                ? null
-                                : (_isRunning ? _pause : _start),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              side: const BorderSide(color: Color(0xFFE4EAE9)),
-                            ),
-                            child: Text(_isRunning ? 'Jeda' : 'Lanjut'),
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (dotColor != null) ...[
+                              Container(
+                                width: 7,
+                                height: 7,
+                                decoration: BoxDecoration(
+                                    color: dotColor, shape: BoxShape.circle),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            const Text('Durasi',
+                                style: TextStyle(
+                                    fontSize: 11.5, color: Color(0xFF5B6B69))),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: _saving ? null : _finish,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF2EC4B6),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            child: _saving
-                                ? const SizedBox(
-                                    height: 18,
-                                    width: 18,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Text('Selesai & Simpan'),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatDuration(elapsed),
+                          style: const TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: -0.5,
                           ),
                         ),
                       ],
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  _MiniStat(
+                    icon: Icons.local_fire_department_outlined,
+                    label: 'Kalori',
+                    value: '${_liveCalories.toStringAsFixed(0)} kcal',
+                  ),
+                  const SizedBox(width: 8),
+                  _MiniStat(
+                    icon: Icons.bolt_outlined,
+                    label: 'Laju',
+                    value: '$rateText /mnt',
+                  ),
+                  const SizedBox(width: 8),
+                  _MiniStat(
+                    icon: Icons.schedule,
+                    label: 'Mulai',
+                    value: _startedAt != null
+                        ? DateFormat('HH:mm').format(_startedAt!)
+                        : '--:--',
+                  ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+              const Text(
+                'Kalori dihitung dari durasi (tanpa GPS)',
+                style: TextStyle(fontSize: 10.5, color: Color(0xFF5B6B69)),
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  // ---------- Shared bottom panel ----------
+
+  Widget _buildBottomPanel(ActivityStyle style, bool started) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x14142020),
+            blurRadius: 24,
+            offset: Offset(0, -10),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Indoor types show these in the main area instead.
+          if (_usesMap) ...[
+            Row(
+              children: [
+                _Stat(label: '\u23f1 Durasi', value: _formatDuration(_displayElapsed)),
+                const _StatDivider(),
+                _Stat(label: '\u26a1 Pace', value: _paceLabel),
+                const _StatDivider(),
+                _Stat(
+                  label: '\ud83d\udd25 Kalori',
+                  value: _liveCalories.toStringAsFixed(0),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
+          if (!_isRunning && started) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F7FA),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE4EAE9)),
+              ),
+              child: TextField(
+                controller: _noteController,
+                style: const TextStyle(fontSize: 12.5),
+                decoration: const InputDecoration(
+                  hintText: 'Catatan (opsional)',
+                  hintStyle: TextStyle(color: Color(0xFF5B6B69)),
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+          if (!started)
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _saving ? null : _start,
+                style: FilledButton.styleFrom(
+                  backgroundColor: style.color,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('Mulai'),
+              ),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _saving ? null : (_isRunning ? _pause : _start),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: const BorderSide(color: Color(0xFFE4EAE9)),
+                    ),
+                    child: Text(_isRunning ? 'Jeda' : 'Lanjut'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _saving ? null : _finish,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF2EC4B6),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: _saving
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text('Selesai & Simpan'),
+                  ),
+                ),
+              ],
+            ),
+          const SizedBox(height: 10),
+          const StepIndicator(step: 2),
+        ],
       ),
     );
   }
@@ -607,7 +739,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
 class _TopBar extends StatelessWidget {
   final String title;
   final ActivityStyle style;
-  const _TopBar({required this.title, required this.style});
+  final VoidCallback onBack;
+  const _TopBar({required this.title, required this.style, required this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -615,10 +748,7 @@ class _TopBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(4, 8, 16, 8),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.pop(context),
-          ),
+          IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack),
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -634,10 +764,7 @@ class _TopBar extends StatelessWidget {
                     title,
                     textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                 ),
               ],
@@ -650,15 +777,11 @@ class _TopBar extends StatelessWidget {
   }
 }
 
+/// Read-only: the type can't change here, go back to step 1 for that.
 class _TypePill extends StatelessWidget {
   final ActivityStyle style;
   final String name;
-  final VoidCallback onTap;
-  const _TypePill({
-    required this.style,
-    required this.name,
-    required this.onTap,
-  });
+  const _TypePill({required this.style, required this.name});
 
   @override
   Widget build(BuildContext context) {
@@ -667,34 +790,154 @@ class _TypePill extends StatelessWidget {
       borderRadius: BorderRadius.circular(14),
       elevation: 4,
       shadowColor: Colors.black26,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 15,
-                backgroundColor: style.color.withValues(alpha: 0.15),
-                child: Icon(style.icon, color: style.color, size: 15),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-              const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: Color(0xFFB7C2C0),
-              ),
-            ],
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 8, 16, 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 13,
+              backgroundColor: style.color.withValues(alpha: 0.15),
+              child: Icon(style.icon, color: style.color, size: 14),
+            ),
+            const SizedBox(width: 9),
+            Text(name,
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FocusTypeChip extends StatelessWidget {
+  final ActivityStyle style;
+  final String name;
+  const _FocusTypeChip({required this.style, required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 6, 14, 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 12,
+            backgroundColor: style.color.withValues(alpha: 0.15),
+            child: Icon(style.icon, color: style.color, size: 13),
+          ),
+          const SizedBox(width: 8),
+          Text(name,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Circular progress for the current minute: starts empty at :00 and
+/// closes up at :59, then begins again.
+class _RingPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  const _RingPainter({required this.progress, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const strokeWidth = 10.0;
+    final rect = Offset.zero & size;
+    final center = rect.center;
+    final radius = (size.shortestSide - strokeWidth) / 2;
+
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..color = color.withValues(alpha: 0.15),
+    );
+
+    if (progress <= 0) return;
+
+    final sweep = 2 * math.pi * progress;
+    final arcPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..shader = SweepGradient(
+        startAngle: 0,
+        endAngle: math.max(sweep, 0.1),
+        colors: [color.withValues(alpha: 0.55), color],
+        transform: const GradientRotation(-math.pi / 2),
+      ).createShader(rect);
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      sweep,
+      false,
+      arcPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) =>
+      old.progress != progress || old.color != color;
+}
+
+class _MiniStat extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _MiniStat({required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 11, color: const Color(0xFF5B6B69)),
+                const SizedBox(width: 3),
+                Text(label,
+                    style: const TextStyle(fontSize: 10, color: Color(0xFF5B6B69))),
+              ],
+            ),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(value,
+                  style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold)),
+            ),
+          ],
         ),
       ),
     );
@@ -719,10 +962,8 @@ class _BackgroundActiveBadge extends StatelessWidget {
           children: [
             Icon(Icons.notifications_active, color: Colors.white, size: 13),
             SizedBox(width: 6),
-            Text(
-              'Tetap tracking walau app ditutup',
-              style: TextStyle(color: Colors.white, fontSize: 11),
-            ),
+            Text('Tetap tracking walau app ditutup',
+                style: TextStyle(color: Colors.white, fontSize: 11)),
           ],
         ),
       ),
@@ -764,15 +1005,11 @@ class _Stat extends StatelessWidget {
     return Expanded(
       child: Column(
         children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 10.5, color: Color(0xFF5B6B69)),
-          ),
+          Text(label,
+              style: const TextStyle(fontSize: 10.5, color: Color(0xFF5B6B69))),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
+          Text(value,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -781,80 +1018,9 @@ class _Stat extends StatelessWidget {
 
 class _StatDivider extends StatelessWidget {
   const _StatDivider();
+
   @override
   Widget build(BuildContext context) {
     return Container(width: 1, height: 30, color: const Color(0xFFE4EAE9));
-  }
-}
-
-class _ActivityTypeSheet extends StatelessWidget {
-  final List<ActivityType> types;
-  final ActivityType? selected;
-  const _ActivityTypeSheet({required this.types, required this.selected});
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Container(
-        margin: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE4EAE9),
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            const SizedBox(height: 12),
-            for (final type in types)
-              InkWell(
-                onTap: () => Navigator.pop(context, type),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  color: selected?.id == type.id
-                      ? const Color(0xFFEAF7F6)
-                      : Colors.transparent,
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: styleForActivity(
-                          type.name,
-                        ).color.withValues(alpha: 0.15),
-                        child: Icon(
-                          styleForActivity(type.name).icon,
-                          color: styleForActivity(type.name).color,
-                          size: 16,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        type.name,
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
   }
 }
