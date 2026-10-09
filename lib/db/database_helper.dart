@@ -165,6 +165,65 @@ class DatabaseHelper {
     return result.first['id'] as int;
   }
 
+  /// Links a locally created activity to the backend row it was pushed as.
+  Future<void> setActivityServerId(int localId, int serverId) async {
+    final db = await database;
+    await db.update(
+      'activities',
+      {'server_id': serverId},
+      where: 'id = ?',
+      whereArgs: [localId],
+    );
+  }
+
+  /// Local activity ids (of this user) that have a recorded GPS route.
+  Future<Set<int>> getActivityIdsWithRoute(int userId) async {
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT rp.activity_id AS id
+      FROM route_points rp
+      JOIN activities a ON a.id = rp.activity_id
+      WHERE a.user_id = ?
+    ''', [userId]);
+    return {for (final r in rows) r['id'] as int};
+  }
+
+  /// Local activity ids (of this user) already linked to a backend row.
+  Future<Set<int>> getSyncedActivityIds(int userId) async {
+    final db = await database;
+    final rows = await db.query(
+      'activities',
+      columns: ['id'],
+      where: 'user_id = ? AND server_id IS NOT NULL',
+      whereArgs: [userId],
+    );
+    return {for (final r in rows) r['id'] as int};
+  }
+
+  /// A local activity of the same type that started at (nearly) the same
+  /// moment and isn't linked to the backend yet. Used when pulling, so rows
+  /// that were pushed from this device get linked instead of duplicated.
+  Future<int?> findUnlinkedActivityId({
+    required int userId,
+    required int activityTypeId,
+    required DateTime startedAt,
+  }) async {
+    final db = await database;
+    final rows = await db.query(
+      'activities',
+      columns: ['id', 'date'],
+      where: 'user_id = ? AND activity_type_id = ? AND server_id IS NULL',
+      whereArgs: [userId, activityTypeId],
+    );
+    for (final r in rows) {
+      final d = DateTime.tryParse(r['date'] as String);
+      if (d != null && d.difference(startedAt).inSeconds.abs() <= 60) {
+        return r['id'] as int;
+      }
+    }
+    return null;
+  }
+
   Future<int> insertActivityFromServer(Activity activity, int serverId) async {
     final db = await database;
     final map = activity.toMap()..remove('id');

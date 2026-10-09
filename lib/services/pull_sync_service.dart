@@ -63,6 +63,30 @@ class PullSyncService {
             60)
         .clamp(60, 1 << 30);
 
+    // The app sends its local wall-clock time and the server hands the same
+    // numbers back flagged as UTC, so rebuild a plain local DateTime from them.
+    final parsedStart = DateTime.parse(item['start_date'] as String);
+    final startedAt = DateTime(
+      parsedStart.year,
+      parsedStart.month,
+      parsedStart.day,
+      parsedStart.hour,
+      parsedStart.minute,
+      parsedStart.second,
+    );
+
+    // Pushed from this very device earlier? Link that row instead of
+    // importing a second copy.
+    final linkable = await _db.findUnlinkedActivityId(
+      userId: localUserId,
+      activityTypeId: localTypeId,
+      startedAt: startedAt,
+    );
+    if (linkable != null) {
+      await _db.setActivityServerId(linkable, serverId);
+      return;
+    }
+
     final description = item['description'] as String?;
 
     final activity = Activity(
@@ -70,7 +94,7 @@ class PullSyncService {
       activityTypeId: localTypeId,
       durationMinutes: (movingSeconds / 60).round().clamp(1, 999999),
       caloriesBurned: (item['calories'] as num?)?.toDouble() ?? 0,
-      date: DateTime.parse(item['start_date'] as String),
+      date: startedAt,
       note: (description != null && description.isNotEmpty) ? description : null,
     );
 

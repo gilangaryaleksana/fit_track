@@ -1,4 +1,5 @@
 import 'package:geolocator/geolocator.dart' hide ActivityType;
+import '../db/database_helper.dart';
 import '../models/models.dart';
 import 'api_client.dart';
 
@@ -14,8 +15,8 @@ class SyncService {
 
   Future<int?> _serverActivityTypeId(String name) async {
     try {
-      _serverActivityTypesCache ??= (await ApiClient.instance
-          .get('activity-types?per_page=50'))['data'] as List<dynamic>;
+      _serverActivityTypesCache ??=
+          (await ApiClient.instance.get('activity-types?per_page=50'))['data'] as List<dynamic>;
       for (final t in _serverActivityTypesCache!) {
         if ((t['name'] as String).toLowerCase() == name.toLowerCase()) {
           return t['id'] as int;
@@ -40,7 +41,20 @@ class SyncService {
     return total;
   }
 
+  /// Removes an activity from the backend too. Without this, the next pull
+  /// would bring a locally deleted activity right back. Best-effort: if
+  /// we're offline it stays on the server until deleted again.
+  Future<void> deleteRemote(int serverId) async {
+    try {
+      if (!await ApiClient.instance.isLoggedIn) return;
+      await ApiClient.instance.delete('activities/$serverId');
+    } catch (_) {
+      // Offline or already gone — nothing else to do.
+    }
+  }
+
   Future<void> syncActivity({
+    required int localActivityId,
     required Activity activity,
     required String activityTypeName,
     List<RoutePoint> routePoints = const [],
@@ -77,6 +91,11 @@ class SyncService {
 
       final created = await ApiClient.instance.post('activities', body);
       final serverActivityId = created['id'] as int;
+
+      // Remember the link right away (before uploading the route), so this
+      // activity is never pushed twice or re-imported as a duplicate later.
+      await DatabaseHelper.instance
+          .setActivityServerId(localActivityId, serverActivityId);
 
       if (routePoints.isNotEmpty) {
         final points = [

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import '../db/database_helper.dart';
 import '../models/models.dart';
+import '../services/sync_service.dart';
 import '../utils/activity_style.dart';
 
 const _cartoKey = 'cb1_3xnq_1_d5f34b66a55d20c44f8bb363';
@@ -12,7 +13,8 @@ const _cartoKey = 'cb1_3xnq_1_d5f34b66a55d20c44f8bb363';
 class ActivityDetailScreen extends StatefulWidget {
   final Activity activity;
   final ActivityType? type;
-  const ActivityDetailScreen({super.key, required this.activity, required this.type});
+  const ActivityDetailScreen(
+      {super.key, required this.activity, required this.type});
 
   @override
   State<ActivityDetailScreen> createState() => _ActivityDetailScreenState();
@@ -58,12 +60,24 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     final dLng = _deg2rad(b.longitude - a.longitude);
 
     final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1) * math.cos(lat2) * math.sin(dLng / 2) * math.sin(dLng / 2);
+        math.cos(lat1) *
+            math.cos(lat2) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
     final c = 2 * math.atan2(math.sqrt(h), math.sqrt(1 - h));
     return earthRadius * c;
   }
 
   double _deg2rad(double deg) => deg * math.pi / 180;
+
+  /// What this session actually earned per minute (e.g. "3" or "3.5").
+  String get _caloriesPerMinuteLabel {
+    final minutes = widget.activity.durationMinutes;
+    if (minutes <= 0) return '0';
+    final rate = double.parse(
+        (widget.activity.caloriesBurned / minutes).toStringAsFixed(1));
+    return rate % 1 == 0 ? rate.toStringAsFixed(0) : rate.toStringAsFixed(1);
+  }
 
   String get _paceLabel {
     final km = _distanceMeters / 1000;
@@ -81,7 +95,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         title: const Text('Hapus Aktivitas?'),
         content: const Text('Data ini akan dihapus permanen dari HP kamu.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Hapus', style: TextStyle(color: Colors.red)),
@@ -92,7 +108,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     if (confirmed != true) return;
 
     setState(() => _deleting = true);
+    final serverId = _serverId;
     await _db.deleteActivity(widget.activity.id!);
+    if (serverId != null) SyncService.instance.deleteRemote(serverId);
     if (mounted) Navigator.pop(context, true);
   }
 
@@ -102,6 +120,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         ? styleForActivity(widget.type!.name)
         : const ActivityStyle(Icons.sports, Colors.teal);
     final hasRoute = _routePoints.length > 1;
+    // Swimming/yoga/gym never record a route, so "no GPS data" would be
+    // misleading for them: they get a time-focused layout instead.
+    final timeFocused = !style.usesMap;
     final dateFormat = DateFormat('dd MMM yyyy, HH:mm');
 
     return Scaffold(
@@ -137,11 +158,13 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                             options: MapOptions(
                               initialCenter: ll.LatLng(
                                 _routePoints[_routePoints.length ~/ 2].latitude,
-                                _routePoints[_routePoints.length ~/ 2].longitude,
+                                _routePoints[_routePoints.length ~/ 2]
+                                    .longitude,
                               ),
                               initialZoom: 14,
                               interactionOptions: const InteractionOptions(
-                                flags: InteractiveFlag.pinchZoom | InteractiveFlag.drag,
+                                flags: InteractiveFlag.pinchZoom |
+                                    InteractiveFlag.drag,
                               ),
                             ),
                             children: [
@@ -153,7 +176,8 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                               PolylineLayer(polylines: [
                                 Polyline(
                                   points: _routePoints
-                                      .map((p) => ll.LatLng(p.latitude, p.longitude))
+                                      .map((p) =>
+                                          ll.LatLng(p.latitude, p.longitude))
                                       .toList(),
                                   color: style.color,
                                   strokeWidth: 4,
@@ -163,28 +187,30 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                               ]),
                               MarkerLayer(markers: [
                                 Marker(
-                                  point: ll.LatLng(
-                                      _routePoints.first.latitude, _routePoints.first.longitude),
+                                  point: ll.LatLng(_routePoints.first.latitude,
+                                      _routePoints.first.longitude),
                                   width: 14,
                                   height: 14,
                                   child: Container(
                                     decoration: BoxDecoration(
                                       color: const Color(0xFF2EC4B6),
                                       shape: BoxShape.circle,
-                                      border: Border.all(color: Colors.white, width: 2),
+                                      border: Border.all(
+                                          color: Colors.white, width: 2),
                                     ),
                                   ),
                                 ),
                                 Marker(
-                                  point: ll.LatLng(
-                                      _routePoints.last.latitude, _routePoints.last.longitude),
+                                  point: ll.LatLng(_routePoints.last.latitude,
+                                      _routePoints.last.longitude),
                                   width: 14,
                                   height: 14,
                                   child: Container(
                                     decoration: BoxDecoration(
                                       color: style.color,
                                       shape: BoxShape.circle,
-                                      border: Border.all(color: Colors.white, width: 2),
+                                      border: Border.all(
+                                          color: Colors.white, width: 2),
                                     ),
                                   ),
                                 ),
@@ -200,6 +226,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                       ),
                     ),
                   )
+                else if (timeFocused)
+                  _TimeHero(
+                      style: style, minutes: widget.activity.durationMinutes)
                 else
                   Container(
                     height: 160,
@@ -211,15 +240,16 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(style.icon, size: 30, color: const Color(0xFFCBD5D3)),
+                        Icon(style.icon,
+                            size: 30, color: const Color(0xFFCBD5D3)),
                         const SizedBox(height: 8),
                         const Text('Tidak ada data rute GPS',
-                            style: TextStyle(color: Color(0xFF5B6B69), fontSize: 12.5)),
+                            style: TextStyle(
+                                color: Color(0xFF5B6B69), fontSize: 12.5)),
                       ],
                     ),
                   ),
                 const SizedBox(height: 16),
-
                 Row(
                   children: [
                     CircleAvatar(
@@ -245,7 +275,6 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-
                 GridView.count(
                   crossAxisCount: 2,
                   shrinkWrap: true,
@@ -254,32 +283,48 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   crossAxisSpacing: 10,
                   childAspectRatio: 1.9,
                   children: [
-                    _StatTile(
-                      icon: Icons.timer_outlined,
-                      label: 'Durasi',
-                      value: '${widget.activity.durationMinutes} menit',
-                    ),
-                    if (hasRoute) ...[
+                    if (timeFocused) ...[
+                      // Duration is already the hero, so show what it earned.
                       _StatTile(
-                        icon: Icons.location_on_outlined,
-                        label: 'Jarak',
-                        value: '${(_distanceMeters / 1000).toStringAsFixed(2)} km',
+                        icon: Icons.local_fire_department_outlined,
+                        label: 'Kalori',
+                        value:
+                            '${widget.activity.caloriesBurned.toStringAsFixed(0)} kcal',
                       ),
                       _StatTile(
                         icon: Icons.bolt_outlined,
-                        label: 'Pace',
-                        value: '$_paceLabel /km',
+                        label: 'Laju',
+                        value: '$_caloriesPerMinuteLabel kcal/mnt',
+                      ),
+                    ] else ...[
+                      _StatTile(
+                        icon: Icons.timer_outlined,
+                        label: 'Durasi',
+                        value: '${widget.activity.durationMinutes} menit',
+                      ),
+                      if (hasRoute) ...[
+                        _StatTile(
+                          icon: Icons.location_on_outlined,
+                          label: 'Jarak',
+                          value:
+                              '${(_distanceMeters / 1000).toStringAsFixed(2)} km',
+                        ),
+                        _StatTile(
+                          icon: Icons.bolt_outlined,
+                          label: 'Pace',
+                          value: '$_paceLabel /km',
+                        ),
+                      ],
+                      _StatTile(
+                        icon: Icons.local_fire_department_outlined,
+                        label: 'Kalori',
+                        value:
+                            '${widget.activity.caloriesBurned.toStringAsFixed(0)} kcal',
                       ),
                     ],
-                    _StatTile(
-                      icon: Icons.local_fire_department_outlined,
-                      label: 'Kalori',
-                      value: '${widget.activity.caloriesBurned.toStringAsFixed(0)} kcal',
-                    ),
                   ],
                 ),
                 const SizedBox(height: 14),
-
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
@@ -315,19 +360,25 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        hasRoute ? 'Jenis: Aktivitas Langsung' : 'Jenis: Input Manual',
-                        style: const TextStyle(fontSize: 11.5, color: Color(0xFF5B6B69)),
+                        hasRoute
+                            ? 'Jenis: Aktivitas Langsung'
+                            : (timeFocused
+                                ? 'Kalori dihitung dari durasi'
+                                : 'Jenis: Input Manual'),
+                        style: const TextStyle(
+                            fontSize: 11.5, color: Color(0xFF5B6B69)),
                       ),
                       if (!hasRoute)
                         Text(
-                          _serverId != null ? '\u2601\ufe0f Tersinkron' : '\u2601\ufe0f Belum sinkron',
+                          _serverId != null
+                              ? '\u2601\ufe0f Tersinkron'
+                              : '\u2601\ufe0f Belum sinkron',
                           style: TextStyle(
                             fontSize: 11.5,
                             color: _serverId != null
@@ -337,12 +388,97 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                         )
                       else
                         Text('${_routePoints.length} titik GPS',
-                            style: const TextStyle(fontSize: 11.5, color: Color(0xFF5B6B69))),
+                            style: const TextStyle(
+                                fontSize: 11.5, color: Color(0xFF5B6B69))),
                     ],
                   ),
                 ),
               ],
             ),
+    );
+  }
+}
+
+/// 32 -> "32 menit", 65 -> "1 jam 5 menit", 120 -> "2 jam".
+String _formatLongDuration(int minutes) {
+  final h = minutes ~/ 60;
+  final m = minutes % 60;
+  if (h == 0) return '$m menit';
+  if (m == 0) return '$h jam';
+  return '$h jam $m menit';
+}
+
+/// Hero for activities without a map: the duration, big, on the type's color.
+class _TimeHero extends StatelessWidget {
+  final ActivityStyle style;
+  final int minutes;
+  const _TimeHero({required this.style, required this.minutes});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        height: 160,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [style.color.withValues(alpha: 0.7), style.color],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Stack(
+          children: [
+            // Oversized, faint icon as a watermark.
+            Positioned(
+              right: -18,
+              bottom: -22,
+              child: Icon(style.icon,
+                  size: 130, color: Colors.white.withValues(alpha: 0.14)),
+            ),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer_outlined,
+                            size: 14, color: Colors.white70),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'DURASI',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.8,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        _formatLongDuration(minutes),
+                        style: const TextStyle(
+                          fontSize: 38,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -363,7 +499,9 @@ class _SyncChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.cloud_outlined,
-              size: 13, color: synced ? const Color(0xFF1B9AAA) : const Color(0xFFB7914A)),
+              size: 13,
+              color:
+                  synced ? const Color(0xFF1B9AAA) : const Color(0xFFB7914A)),
           const SizedBox(width: 5),
           Text(
             synced ? 'Tersinkron' : 'Belum sinkron',
@@ -383,7 +521,8 @@ class _StatTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  const _StatTile({required this.icon, required this.label, required this.value});
+  const _StatTile(
+      {required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -401,12 +540,15 @@ class _StatTile extends StatelessWidget {
             children: [
               Icon(icon, size: 13, color: const Color(0xFF5B6B69)),
               const SizedBox(width: 5),
-              Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF5B6B69))),
+              Text(label,
+                  style:
+                      const TextStyle(fontSize: 11, color: Color(0xFF5B6B69))),
             ],
           ),
           const SizedBox(height: 6),
           Text(value,
-              style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold)),
+              style:
+                  const TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold)),
         ],
       ),
     );

@@ -3,9 +3,8 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import '../db/database_helper.dart';
 import '../models/models.dart';
 import '../utils/activity_style.dart';
-import 'activity_type_picker_screen.dart';
-import 'add_activity_screen.dart';
 import 'live_tracking_screen.dart';
+import 'start_activity_flow.dart';
 
 /// Tab body — no own Scaffold app bar/bottom nav, rendered inside
 /// MainNavigationScreen. Keeps its own nested Scaffold only so its FAB
@@ -220,51 +219,7 @@ class HomeScreenState extends State<HomeScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Tambah Aktivitas'),
         onPressed: () async {
-          final choice = await showModalBottomSheet<String>(
-            context: context,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            builder: (ctx) => SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 8),
-                  ListTile(
-                    leading: const Icon(Icons.timer, color: Color(0xFF2EC4B6)),
-                    title: const Text('Aktivitas Langsung'),
-                    subtitle: const Text('Timer & kalori berjalan real-time'),
-                    onTap: () => Navigator.pop(ctx, 'live'),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.edit_note),
-                    title: const Text('Input Manual'),
-                    subtitle: const Text('Masukkan durasi setelah selesai'),
-                    onTap: () => Navigator.pop(ctx, 'manual'),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            ),
-          );
-
-          if (!mounted || choice == null) return;
-
-          // A running/paused session is resumed directly; otherwise start
-          // the 2-step flow (pick a type, then track).
-          final Widget target;
-          if (choice == 'live') {
-            target = _ongoingSession != null
-                ? LiveTrackingScreen(userId: widget.userId)
-                : ActivityTypePickerScreen(userId: widget.userId);
-          } else {
-            target = AddActivityScreen(userId: widget.userId);
-          }
-
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => target),
-          );
+          await startActivityFlow(context, widget.userId);
           loadData();
         },
       ),

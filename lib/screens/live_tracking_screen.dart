@@ -123,15 +123,19 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
 
   Future<void> _resumeIfServiceRunning(List<ActivityType> types) async {
     final sessionActive =
-        await FlutterForegroundTask.getData<bool>(key: 'sessionActive') ?? false;
+        await FlutterForegroundTask.getData<bool>(key: 'sessionActive') ??
+            false;
     if (!sessionActive) return;
 
     final isRunning = await FlutterForegroundTask.isRunningService;
-    final typeId = await FlutterForegroundTask.getData<int>(key: 'activityTypeId');
+    final typeId =
+        await FlutterForegroundTask.getData<int>(key: 'activityTypeId');
     final seconds =
-        await FlutterForegroundTask.getData<int>(key: 'accumulatedSeconds') ?? 0;
-    final distance =
-        await FlutterForegroundTask.getData<double>(key: 'accumulatedDistance') ?? 0;
+        await FlutterForegroundTask.getData<int>(key: 'accumulatedSeconds') ??
+            0;
+    final distance = await FlutterForegroundTask.getData<double>(
+            key: 'accumulatedDistance') ??
+        0;
     final movingSeconds = await FlutterForegroundTask.getData<int>(
             key: 'accumulatedMovingSeconds') ??
         0;
@@ -152,7 +156,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       _elapsed = Duration(seconds: seconds);
       _totalDistanceMeters = distance;
       _movingSeconds = movingSeconds;
-      _startedAt = startedAtRaw != null ? DateTime.tryParse(startedAtRaw) : null;
+      _startedAt =
+          startedAtRaw != null ? DateTime.tryParse(startedAtRaw) : null;
       _isRunning = isRunning;
     });
     if (isRunning) _startUiTicker();
@@ -253,7 +258,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'fittrack_tracking',
         channelName: 'Tracking Aktivitas',
-        channelDescription: 'Menampilkan status aktivitas yang sedang berlangsung',
+        channelDescription:
+            'Menampilkan status aktivitas yang sedang berlangsung',
         onlyAlertOnce: true,
       ),
       iosNotificationOptions: const IOSNotificationOptions(),
@@ -267,7 +273,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   }
 
   Future<bool> _ensurePermissions() async {
-    final notifPermission = await FlutterForegroundTask.checkNotificationPermission();
+    final notifPermission =
+        await FlutterForegroundTask.checkNotificationPermission();
     if (notifPermission != NotificationPermission.granted) {
       await FlutterForegroundTask.requestNotificationPermission();
     }
@@ -355,6 +362,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     // Fire-and-forget: app must keep working fully offline, so this never
     // blocks navigation or shows an error if there's no connection.
     SyncService.instance.syncActivity(
+      localActivityId: activityId,
       activity: activity,
       activityTypeName: _selectedType!.name,
       routePoints: _routePoints,
@@ -509,7 +517,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
             child: Text(
               _locationError!,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.w600),
             ),
           ),
       ],
@@ -522,7 +531,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     final elapsed = _displayElapsed;
     final progress = started ? (elapsed.inSeconds % 60) / 60 : 0.0;
     final rate = _selectedType?.caloriesPerMinute ?? 0;
-    final rateText = rate % 1 == 0 ? rate.toStringAsFixed(0) : rate.toStringAsFixed(1);
+    final rateText =
+        rate % 1 == 0 ? rate.toStringAsFixed(0) : rate.toStringAsFixed(1);
 
     final Color? dotColor = _isRunning
         ? const Color(0xFF4ADE80)
@@ -552,7 +562,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   children: [
                     CustomPaint(
                       size: const Size(220, 220),
-                      painter: _RingPainter(progress: progress, color: style.color),
+                      painter:
+                          _RingPainter(progress: progress, color: style.color),
                     ),
                     Column(
                       mainAxisSize: MainAxisSize.min,
@@ -647,7 +658,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
           if (_usesMap) ...[
             Row(
               children: [
-                _Stat(label: '\u23f1 Durasi', value: _formatDuration(_displayElapsed)),
+                _Stat(
+                    label: '\u23f1 Durasi',
+                    value: _formatDuration(_displayElapsed)),
                 const _StatDivider(),
                 _Stat(label: '\u26a1 Pace', value: _paceLabel),
                 const _StatDivider(),
@@ -740,7 +753,8 @@ class _TopBar extends StatelessWidget {
   final String title;
   final ActivityStyle style;
   final VoidCallback onBack;
-  const _TopBar({required this.title, required this.style, required this.onBack});
+  const _TopBar(
+      {required this.title, required this.style, required this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -764,7 +778,8 @@ class _TopBar extends StatelessWidget {
                     title,
                     textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                 ),
               ],
@@ -802,7 +817,8 @@ class _TypePill extends StatelessWidget {
             ),
             const SizedBox(width: 9),
             Text(name,
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w700, fontSize: 12.5)),
           ],
         ),
       ),
@@ -840,7 +856,8 @@ class _FocusTypeChip extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(name,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+              style:
+                  const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
         ],
       ),
     );
@@ -902,7 +919,8 @@ class _MiniStat extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  const _MiniStat({required this.icon, required this.label, required this.value});
+  const _MiniStat(
+      {required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -928,14 +946,16 @@ class _MiniStat extends StatelessWidget {
                 Icon(icon, size: 11, color: const Color(0xFF5B6B69)),
                 const SizedBox(width: 3),
                 Text(label,
-                    style: const TextStyle(fontSize: 10, color: Color(0xFF5B6B69))),
+                    style: const TextStyle(
+                        fontSize: 10, color: Color(0xFF5B6B69))),
               ],
             ),
             const SizedBox(height: 4),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(value,
-                  style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold)),
+                  style: const TextStyle(
+                      fontSize: 15.5, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -1009,7 +1029,8 @@ class _Stat extends StatelessWidget {
               style: const TextStyle(fontSize: 10.5, color: Color(0xFF5B6B69))),
           const SizedBox(height: 4),
           Text(value,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         ],
       ),
     );
