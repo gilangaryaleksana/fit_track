@@ -133,7 +133,8 @@ class DatabaseHelper {
 
   Future<AppUser?> getUserByEmail(String email) async {
     final db = await database;
-    final result = await db.query('users', where: 'email = ?', whereArgs: [email]);
+    final result =
+        await db.query('users', where: 'email = ?', whereArgs: [email]);
     if (result.isEmpty) return null;
     return AppUser.fromMap(result.first);
   }
@@ -249,8 +250,8 @@ class DatabaseHelper {
 
   Future<int?> getActivityServerId(int id) async {
     final db = await database;
-    final result =
-        await db.query('activities', columns: ['server_id'], where: 'id = ?', whereArgs: [id]);
+    final result = await db.query('activities',
+        columns: ['server_id'], where: 'id = ?', whereArgs: [id]);
     if (result.isEmpty) return null;
     return result.first['server_id'] as int?;
   }
@@ -291,7 +292,8 @@ class DatabaseHelper {
   }
 
   // ---------- ROUTE POINTS ----------
-  Future<void> insertRoutePoints(int activityId, List<RoutePoint> points) async {
+  Future<void> insertRoutePoints(
+      int activityId, List<RoutePoint> points) async {
     if (points.isEmpty) return;
     final db = await database;
     final batch = db.batch();
@@ -336,6 +338,48 @@ class DatabaseHelper {
     }
     return db.insert('daily_targets', target.toMap()..remove('id'));
   }
+
+  /// The most recently dated target, used to prefill a day with no target yet.
+  Future<DailyTarget?> getLatestTarget(int userId) async {
+    final db = await database;
+    final result = await db.query(
+      'daily_targets',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'date DESC',
+      limit: 1,
+    );
+    if (result.isEmpty) return null;
+    return DailyTarget.fromMap(result.first);
+  }
+
+  /// Targets whose day falls in [start, endExclusive). Dates are stored as
+  /// ISO strings, so comparing against date-only strings works lexicographically.
+  Future<List<DailyTarget>> getTargetsInRange(
+      int userId, DateTime start, DateTime endExclusive) async {
+    final db = await database;
+    final result = await db.query(
+      'daily_targets',
+      where: 'user_id = ? AND date >= ? AND date < ?',
+      whereArgs: [userId, _dayString(start), _dayString(endExclusive)],
+    );
+    return result.map((e) => DailyTarget.fromMap(e)).toList();
+  }
+
+  /// Activities whose day falls in [start, endExclusive).
+  Future<List<Activity>> getActivitiesInRange(
+      int userId, DateTime start, DateTime endExclusive) async {
+    final db = await database;
+    final result = await db.query(
+      'activities',
+      where: 'user_id = ? AND date >= ? AND date < ?',
+      whereArgs: [userId, _dayString(start), _dayString(endExclusive)],
+      orderBy: 'date DESC',
+    );
+    return result.map((e) => Activity.fromMap(e)).toList();
+  }
+
+  String _dayString(DateTime d) => d.toIso8601String().substring(0, 10);
 
   Future<DailyTarget?> getTargetByDate(int userId, DateTime date) async {
     final db = await database;
