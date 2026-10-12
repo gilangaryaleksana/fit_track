@@ -23,7 +23,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final _homeKey = GlobalKey<HomeScreenState>();
   int _index = 0;
 
-  static const _titles = ['Tracking Kesehatan', 'Riwayat Aktivitas', 'Target Harian'];
+  static const _titles = [
+    'Tracking Kesehatan',
+    'Riwayat Aktivitas',
+    'Target Harian'
+  ];
 
   void _goToTab(int i) {
     setState(() => _index = i);
@@ -49,9 +53,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         content: const Text('Kamu perlu login lagi untuk masuk ke akun ini.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
           TextButton(
-              onPressed: () => Navigator.pop(ctx, true), child: const Text('Keluar')),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Keluar')),
         ],
       ),
     );
@@ -92,6 +98,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             key: _homeKey,
             userId: widget.userId,
             onGoToTarget: () => _goToTab(2),
+            onGoToHistory: () => _goToTab(1),
           ),
           HistoryScreen(userId: widget.userId),
           TargetScreen(userId: widget.userId),
