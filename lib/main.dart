@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'db/database_helper.dart';
@@ -7,10 +8,16 @@ import 'screens/auth_screen.dart';
 import 'screens/main_navigation_screen.dart';
 import 'services/api_client.dart';
 import 'services/pull_sync_service.dart';
+import 'theme/app_theme.dart';
+import 'theme/theme_controller.dart';
+
+/// Light/dark is driven by the phone's ambient light sensor.
+final themeController = ThemeController();
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   FlutterForegroundTask.initCommunicationPort();
+  themeController.start();
   runApp(const HealthTrackerApp());
 }
 
@@ -19,40 +26,23 @@ class HealthTrackerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Tracking Kesehatan',
-      theme: ThemeData(
-        colorSchemeSeed: const Color(0xFF2EC4B6),
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF5F7FA),
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-          elevation: 0,
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeController.mode,
+      builder: (context, mode, _) => MaterialApp(
+        title: 'Tracking Kesehatan',
+        theme: buildAppTheme(Brightness.light),
+        darkTheme: buildAppTheme(Brightness.dark),
+        themeMode: mode,
+        // Screens without an AppBar (login, live tracking) wouldn't update the
+        // status bar icons on their own, so they'd vanish on a dark background.
+        builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+          value: Theme.of(context).brightness == Brightness.dark
+              ? SystemUiOverlayStyle.light
+              : SystemUiOverlayStyle.dark,
+          child: child!,
         ),
-        cardTheme: CardThemeData(
-          elevation: 1,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          margin: const EdgeInsets.symmetric(vertical: 6),
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          filled: true,
-          fillColor: Colors.white,
-        ),
+        home: const StartupScreen(),
       ),
-      home: const StartupScreen(),
     );
   }
 }

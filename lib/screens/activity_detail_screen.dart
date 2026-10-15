@@ -7,14 +7,14 @@ import '../db/database_helper.dart';
 import '../models/models.dart';
 import '../services/sync_service.dart';
 import '../utils/activity_style.dart';
+import '../theme/app_colors.dart';
 
 const _cartoKey = 'cb1_3xnq_1_d5f34b66a55d20c44f8bb363';
 
 class ActivityDetailScreen extends StatefulWidget {
   final Activity activity;
   final ActivityType? type;
-  const ActivityDetailScreen(
-      {super.key, required this.activity, required this.type});
+  const ActivityDetailScreen({super.key, required this.activity, required this.type});
 
   @override
   State<ActivityDetailScreen> createState() => _ActivityDetailScreenState();
@@ -60,10 +60,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     final dLng = _deg2rad(b.longitude - a.longitude);
 
     final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1) *
-            math.cos(lat2) *
-            math.sin(dLng / 2) *
-            math.sin(dLng / 2);
+        math.cos(lat1) * math.cos(lat2) * math.sin(dLng / 2) * math.sin(dLng / 2);
     final c = 2 * math.atan2(math.sqrt(h), math.sqrt(1 - h));
     return earthRadius * c;
   }
@@ -74,8 +71,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   String get _caloriesPerMinuteLabel {
     final minutes = widget.activity.durationMinutes;
     if (minutes <= 0) return '0';
-    final rate = double.parse(
-        (widget.activity.caloriesBurned / minutes).toStringAsFixed(1));
+    final rate = double.parse((widget.activity.caloriesBurned / minutes).toStringAsFixed(1));
     return rate % 1 == 0 ? rate.toStringAsFixed(0) : rate.toStringAsFixed(1);
   }
 
@@ -95,9 +91,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         title: const Text('Hapus Aktivitas?'),
         content: const Text('Data ini akan dihapus permanen dari HP kamu.'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Batal')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Hapus', style: TextStyle(color: Colors.red)),
@@ -158,26 +152,23 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                             options: MapOptions(
                               initialCenter: ll.LatLng(
                                 _routePoints[_routePoints.length ~/ 2].latitude,
-                                _routePoints[_routePoints.length ~/ 2]
-                                    .longitude,
+                                _routePoints[_routePoints.length ~/ 2].longitude,
                               ),
                               initialZoom: 14,
                               interactionOptions: const InteractionOptions(
-                                flags: InteractiveFlag.pinchZoom |
-                                    InteractiveFlag.drag,
+                                flags: InteractiveFlag.pinchZoom | InteractiveFlag.drag,
                               ),
                             ),
                             children: [
                               TileLayer(
                                 urlTemplate:
-                                    'https://basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}.png?key=$_cartoKey',
+                                    'https://basemaps.cartocdn.com/rastertiles/${context.isDark ? 'dark' : 'light'}_nolabels/{z}/{x}/{y}.png?key=$_cartoKey',
                                 userAgentPackageName: 'com.gilangarya.fittrack',
                               ),
                               PolylineLayer(polylines: [
                                 Polyline(
                                   points: _routePoints
-                                      .map((p) =>
-                                          ll.LatLng(p.latitude, p.longitude))
+                                      .map((p) => ll.LatLng(p.latitude, p.longitude))
                                       .toList(),
                                   color: style.color,
                                   strokeWidth: 4,
@@ -187,30 +178,28 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                               ]),
                               MarkerLayer(markers: [
                                 Marker(
-                                  point: ll.LatLng(_routePoints.first.latitude,
-                                      _routePoints.first.longitude),
+                                  point: ll.LatLng(
+                                      _routePoints.first.latitude, _routePoints.first.longitude),
                                   width: 14,
                                   height: 14,
                                   child: Container(
                                     decoration: BoxDecoration(
                                       color: const Color(0xFF2EC4B6),
                                       shape: BoxShape.circle,
-                                      border: Border.all(
-                                          color: Colors.white, width: 2),
+                                      border: Border.all(color: Colors.white, width: 2),
                                     ),
                                   ),
                                 ),
                                 Marker(
-                                  point: ll.LatLng(_routePoints.last.latitude,
-                                      _routePoints.last.longitude),
+                                  point: ll.LatLng(
+                                      _routePoints.last.latitude, _routePoints.last.longitude),
                                   width: 14,
                                   height: 14,
                                   child: Container(
                                     decoration: BoxDecoration(
                                       color: style.color,
                                       shape: BoxShape.circle,
-                                      border: Border.all(
-                                          color: Colors.white, width: 2),
+                                      border: Border.all(color: Colors.white, width: 2),
                                     ),
                                   ),
                                 ),
@@ -227,29 +216,27 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                     ),
                   )
                 else if (timeFocused)
-                  _TimeHero(
-                      style: style, minutes: widget.activity.durationMinutes)
+                  _TimeHero(style: style, minutes: widget.activity.durationMinutes)
                 else
                   Container(
                     height: 160,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: context.colors.surface,
                       borderRadius: BorderRadius.circular(18),
                     ),
                     alignment: Alignment.center,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(style.icon,
-                            size: 30, color: const Color(0xFFCBD5D3)),
+                        Icon(style.icon, size: 30, color: context.colors.lineStrong),
                         const SizedBox(height: 8),
-                        const Text('Tidak ada data rute GPS',
-                            style: TextStyle(
-                                color: Color(0xFF5B6B69), fontSize: 12.5)),
+                        Text('Tidak ada data rute GPS',
+                            style: TextStyle(color: context.colors.inkSoft, fontSize: 12.5)),
                       ],
                     ),
                   ),
                 const SizedBox(height: 16),
+
                 Row(
                   children: [
                     CircleAvatar(
@@ -267,14 +254,15 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                                   fontSize: 17, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 2),
                           Text(dateFormat.format(widget.activity.date),
-                              style: const TextStyle(
-                                  fontSize: 12, color: Color(0xFF5B6B69))),
+                              style: TextStyle(
+                                  fontSize: 12, color: context.colors.inkSoft)),
                         ],
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
+
                 GridView.count(
                   crossAxisCount: 2,
                   shrinkWrap: true,
@@ -288,8 +276,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                       _StatTile(
                         icon: Icons.local_fire_department_outlined,
                         label: 'Kalori',
-                        value:
-                            '${widget.activity.caloriesBurned.toStringAsFixed(0)} kcal',
+                        value: '${widget.activity.caloriesBurned.toStringAsFixed(0)} kcal',
                       ),
                       _StatTile(
                         icon: Icons.bolt_outlined,
@@ -306,8 +293,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                         _StatTile(
                           icon: Icons.location_on_outlined,
                           label: 'Jarak',
-                          value:
-                              '${(_distanceMeters / 1000).toStringAsFixed(2)} km',
+                          value: '${(_distanceMeters / 1000).toStringAsFixed(2)} km',
                         ),
                         _StatTile(
                           icon: Icons.bolt_outlined,
@@ -318,28 +304,28 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                       _StatTile(
                         icon: Icons.local_fire_department_outlined,
                         label: 'Kalori',
-                        value:
-                            '${widget.activity.caloriesBurned.toStringAsFixed(0)} kcal',
+                        value: '${widget.activity.caloriesBurned.toStringAsFixed(0)} kcal',
                       ),
                     ],
                   ],
                 ),
                 const SizedBox(height: 14),
+
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: context.colors.surface,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('CATATAN',
+                      Text('CATATAN',
                           style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFF5B6B69))),
+                              color: context.colors.inkSoft)),
                       const SizedBox(height: 6),
                       Text(
                         (widget.activity.note?.isNotEmpty ?? false)
@@ -352,14 +338,15 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                               ? FontStyle.normal
                               : FontStyle.italic,
                           color: (widget.activity.note?.isNotEmpty ?? false)
-                              ? const Color(0xFF14201F)
-                              : const Color(0xFF5B6B69),
+                              ? context.colors.ink
+                              : context.colors.inkSoft,
                         ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 10),
+
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Row(
@@ -371,14 +358,11 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                             : (timeFocused
                                 ? 'Kalori dihitung dari durasi'
                                 : 'Jenis: Input Manual'),
-                        style: const TextStyle(
-                            fontSize: 11.5, color: Color(0xFF5B6B69)),
+                        style: TextStyle(fontSize: 11.5, color: context.colors.inkSoft),
                       ),
                       if (!hasRoute)
                         Text(
-                          _serverId != null
-                              ? '\u2601\ufe0f Tersinkron'
-                              : '\u2601\ufe0f Belum sinkron',
+                          _serverId != null ? '\u2601\ufe0f Tersinkron' : '\u2601\ufe0f Belum sinkron',
                           style: TextStyle(
                             fontSize: 11.5,
                             color: _serverId != null
@@ -388,8 +372,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                         )
                       else
                         Text('${_routePoints.length} titik GPS',
-                            style: const TextStyle(
-                                fontSize: 11.5, color: Color(0xFF5B6B69))),
+                            style: TextStyle(fontSize: 11.5, color: context.colors.inkSoft)),
                     ],
                   ),
                 ),
@@ -434,8 +417,7 @@ class _TimeHero extends StatelessWidget {
             Positioned(
               right: -18,
               bottom: -22,
-              child: Icon(style.icon,
-                  size: 130, color: Colors.white.withValues(alpha: 0.14)),
+              child: Icon(style.icon, size: 130, color: Colors.white.withValues(alpha: 0.14)),
             ),
             Center(
               child: Padding(
@@ -446,8 +428,7 @@ class _TimeHero extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.timer_outlined,
-                            size: 14, color: Colors.white70),
+                        const Icon(Icons.timer_outlined, size: 14, color: Colors.white70),
                         const SizedBox(width: 6),
                         const Text(
                           'DURASI',
@@ -492,16 +473,14 @@ class _SyncChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.92),
+        color: context.colors.surface.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.cloud_outlined,
-              size: 13,
-              color:
-                  synced ? const Color(0xFF1B9AAA) : const Color(0xFFB7914A)),
+              size: 13, color: synced ? const Color(0xFF1B9AAA) : const Color(0xFFB7914A)),
           const SizedBox(width: 5),
           Text(
             synced ? 'Tersinkron' : 'Belum sinkron',
@@ -521,15 +500,14 @@ class _StatTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  const _StatTile(
-      {required this.icon, required this.label, required this.value});
+  const _StatTile({required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -538,17 +516,14 @@ class _StatTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 13, color: const Color(0xFF5B6B69)),
+              Icon(icon, size: 13, color: context.colors.inkSoft),
               const SizedBox(width: 5),
-              Text(label,
-                  style:
-                      const TextStyle(fontSize: 11, color: Color(0xFF5B6B69))),
+              Text(label, style: TextStyle(fontSize: 11, color: context.colors.inkSoft)),
             ],
           ),
           const SizedBox(height: 6),
           Text(value,
-              style:
-                  const TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold)),
+              style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold)),
         ],
       ),
     );

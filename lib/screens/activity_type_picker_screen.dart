@@ -4,6 +4,7 @@ import '../models/models.dart';
 import '../utils/activity_style.dart';
 import '../widgets/step_indicator.dart';
 import 'live_tracking_screen.dart';
+import '../theme/app_colors.dart';
 
 /// Step 1 of "Aktivitas Langsung": pick the activity type first. The next
 /// screen adapts to it (map + GPS for outdoor types, big timer for the rest).
@@ -12,8 +13,7 @@ class ActivityTypePickerScreen extends StatefulWidget {
   const ActivityTypePickerScreen({super.key, required this.userId});
 
   @override
-  State<ActivityTypePickerScreen> createState() =>
-      _ActivityTypePickerScreenState();
+  State<ActivityTypePickerScreen> createState() => _ActivityTypePickerScreenState();
 }
 
 class _ActivityTypePickerScreenState extends State<ActivityTypePickerScreen> {
@@ -70,9 +70,9 @@ class _ActivityTypePickerScreenState extends State<ActivityTypePickerScreen> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 2),
-              const Text(
+              Text(
                 'Pilih salah satu buat lanjut ke tracking',
-                style: TextStyle(fontSize: 12.5, color: Color(0xFF5B6B69)),
+                style: TextStyle(fontSize: 12.5, color: context.colors.inkSoft),
               ),
               const SizedBox(height: 16),
               Expanded(
@@ -116,15 +116,14 @@ class _TypeCard extends StatelessWidget {
   final ActivityType type;
   final bool selected;
   final VoidCallback onTap;
-  const _TypeCard(
-      {required this.type, required this.selected, required this.onTap});
+  const _TypeCard({required this.type, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final style = styleForActivity(type.name);
 
     return Material(
-      color: selected ? const Color(0xFFEAF7F6) : Colors.white,
+      color: selected ? context.colors.tealTint : context.colors.surface,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -152,8 +151,7 @@ class _TypeCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontSize: 12.5, fontWeight: FontWeight.w600),
+                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 5),
               Row(
@@ -162,13 +160,12 @@ class _TypeCard extends StatelessWidget {
                   Icon(
                     style.usesMap ? Icons.place_outlined : Icons.timer_outlined,
                     size: 11,
-                    color: const Color(0xFF5B6B69),
+                    color: context.colors.inkSoft,
                   ),
                   const SizedBox(width: 3),
                   Text(
                     style.usesMap ? 'Pakai peta' : 'Fokus waktu',
-                    style:
-                        const TextStyle(fontSize: 10, color: Color(0xFF5B6B69)),
+                    style: TextStyle(fontSize: 10, color: context.colors.inkSoft),
                   ),
                 ],
               ),

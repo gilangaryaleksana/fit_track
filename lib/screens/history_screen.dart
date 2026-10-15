@@ -6,29 +6,12 @@ import '../utils/activity_style.dart';
 import '../services/sync_service.dart';
 import 'activity_detail_screen.dart';
 import 'start_activity_flow.dart';
+import '../theme/app_colors.dart';
 
-const _weekdays = [
-  'Senin',
-  'Selasa',
-  'Rabu',
-  'Kamis',
-  'Jumat',
-  'Sabtu',
-  'Minggu'
-];
+const _weekdays = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 const _months = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'Mei',
-  'Jun',
-  'Jul',
-  'Agu',
-  'Sep',
-  'Okt',
-  'Nov',
-  'Des',
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+  'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
 ];
 
 /// 3200 -> "3.200" (Indonesian thousands separator, no locale data needed).
@@ -51,8 +34,7 @@ String _dayLabel(DateTime day) {
   final today = DateTime(now.year, now.month, now.day);
   final daysAgo = today.difference(day).inDays;
 
-  final base =
-      '${_weekdays[day.weekday - 1]}, ${day.day} ${_months[day.month - 1]}'
+  final base = '${_weekdays[day.weekday - 1]}, ${day.day} ${_months[day.month - 1]}'
       '${day.year != now.year ? ' ${day.year}' : ''}';
 
   if (daysAgo == 0) return 'Hari ini \u00b7 $base';
@@ -169,10 +151,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     final cutoff = DateTime.now().subtract(const Duration(days: 7));
     final recent = visible.where((a) => a.date.isAfter(cutoff)).toList();
-    final recentMinutes =
-        recent.fold<int>(0, (sum, a) => sum + a.durationMinutes);
-    final recentKcal =
-        recent.fold<double>(0, (sum, a) => sum + a.caloriesBurned);
+    final recentMinutes = recent.fold<int>(0, (sum, a) => sum + a.durationMinutes);
+    final recentKcal = recent.fold<double>(0, (sum, a) => sum + a.caloriesBurned);
 
     final rows = _buildRows(visible);
 
@@ -216,7 +196,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   child: Text(
                     'Belum ada aktivitas ${filterType?.name ?? ''}'.trim(),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Color(0xFF5B6B69)),
+                    style: TextStyle(color: context.colors.inkSoft),
                   ),
                 ),
               ),
@@ -347,8 +327,7 @@ class _SummaryStat extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 3),
-            Text(label,
-                style: const TextStyle(fontSize: 10.5, color: Colors.white70)),
+            Text(label, style: const TextStyle(fontSize: 10.5, color: Colors.white70)),
           ],
         ),
       ),
@@ -423,11 +402,11 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const ink = Color(0xFF14201F);
+    final ink = context.colors.ink;
     return Material(
-      color: selected ? ink : Colors.white,
+      color: selected ? ink : context.colors.surface,
       shape: StadiumBorder(
-        side: BorderSide(color: selected ? ink : const Color(0xFFE4EAE9)),
+        side: BorderSide(color: selected ? ink : context.colors.line),
       ),
       child: InkWell(
         customBorder: const StadiumBorder(),
@@ -438,8 +417,7 @@ class _FilterChip extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (icon != null) ...[
-                Icon(icon,
-                    size: 14, color: selected ? Colors.white : iconColor),
+                Icon(icon, size: 14, color: selected ? context.colors.onInk : iconColor),
                 const SizedBox(width: 5),
               ],
               Text(
@@ -447,7 +425,7 @@ class _FilterChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
-                  color: selected ? Colors.white : const Color(0xFF5B6B69),
+                  color: selected ? context.colors.onInk : context.colors.inkSoft,
                 ),
               ),
             ],
@@ -474,14 +452,13 @@ class _DayHeaderRow extends StatelessWidget {
           Flexible(
             child: Text(
               _dayLabel(header.day),
-              style:
-                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(width: 8),
           Text(
             '${_formatThousands(header.kcal)} kkal',
-            style: const TextStyle(fontSize: 11, color: Color(0xFF5B6B69)),
+            style: TextStyle(fontSize: 11, color: context.colors.inkSoft),
           ),
         ],
       ),
@@ -526,12 +503,11 @@ class _HistoryItem extends StatelessWidget {
             child: const Icon(Icons.delete, color: Colors.white),
           ),
           child: Material(
-            color: Colors.white,
+            color: context.colors.surface,
             child: InkWell(
               onTap: onTap,
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
                 child: Row(
                   children: [
                     CircleAvatar(
@@ -552,8 +528,8 @@ class _HistoryItem extends StatelessWidget {
                           const SizedBox(height: 1),
                           Text(
                             '${activity.durationMinutes} menit \u2022 $time',
-                            style: const TextStyle(
-                                fontSize: 11.5, color: Color(0xFF5B6B69)),
+                            style: TextStyle(
+                                fontSize: 11.5, color: context.colors.inkSoft),
                           ),
                         ],
                       ),
@@ -574,8 +550,8 @@ class _HistoryItem extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (hasRoute) ...[
-                              const Icon(Icons.place_outlined,
-                                  size: 13, color: Color(0xFF5B6B69)),
+                              Icon(Icons.place_outlined,
+                                  size: 13, color: context.colors.inkSoft),
                               const SizedBox(width: 4),
                             ],
                             Icon(
@@ -626,8 +602,7 @@ class _EmptyHistory extends StatelessWidget {
                   ],
                 ),
               ),
-              child:
-                  const Icon(Icons.history, size: 40, color: Color(0xFF1B9AAA)),
+              child: const Icon(Icons.history, size: 40, color: Color(0xFF1B9AAA)),
             ),
             const SizedBox(height: 18),
             const Text(
@@ -635,19 +610,17 @@ class _EmptyHistory extends StatelessWidget {
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Aktivitas yang kamu simpan bakal muncul di sini, lengkap dengan ringkasan mingguannya.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: 12.5, height: 1.55, color: Color(0xFF5B6B69)),
+              style: TextStyle(fontSize: 12.5, height: 1.55, color: context.colors.inkSoft),
             ),
             const SizedBox(height: 18),
             FilledButton(
               onPressed: onStart,
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF2EC4B6),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
               ),
               child: const Text('Mulai Aktivitas'),
             ),

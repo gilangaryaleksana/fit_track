@@ -3,6 +3,7 @@ import '../db/database_helper.dart';
 import '../models/models.dart';
 import '../services/sync_service.dart';
 import '../utils/activity_style.dart';
+import '../theme/app_colors.dart';
 
 class AddActivityScreen extends StatefulWidget {
   final int userId;
@@ -90,8 +91,7 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: ConstrainedBox(
-              constraints:
-                  BoxConstraints(minHeight: constraints.maxHeight - 40),
+              constraints: BoxConstraints(minHeight: constraints.maxHeight - 40),
               child: Center(
                 child: Form(
                   key: _formKey,
@@ -107,9 +107,9 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 12),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: context.colors.surface,
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: const Color(0xFFE4EAE9)),
+                            border: Border.all(color: context.colors.line),
                           ),
                           child: Row(
                             children: [
@@ -125,12 +125,11 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
                                 child: Text(
                                   _selectedType?.name ?? 'Pilih jenis',
                                   style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600),
+                                      fontSize: 14, fontWeight: FontWeight.w600),
                                 ),
                               ),
-                              const Icon(Icons.keyboard_arrow_down_rounded,
-                                  color: Color(0xFFB7C2C0)),
+                              Icon(Icons.keyboard_arrow_down_rounded,
+                                  color: context.colors.iconMuted),
                             ],
                           ),
                         ),
@@ -140,13 +139,10 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
                       TextFormField(
                         controller: _durationController,
                         keyboardType: TextInputType.number,
-                        decoration:
-                            const InputDecoration(hintText: 'contoh: 30'),
+                        decoration: const InputDecoration(hintText: 'contoh: 30'),
                         validator: (value) {
-                          if (value == null || value.isEmpty)
-                            return 'Wajib diisi';
-                          if (int.tryParse(value) == null)
-                            return 'Harus berupa angka';
+                          if (value == null || value.isEmpty) return 'Wajib diisi';
+                          if (int.tryParse(value) == null) return 'Harus berupa angka';
                           return null;
                         },
                       ),
@@ -154,8 +150,8 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
                       const _FieldLabel('Catatan (opsional)'),
                       TextFormField(
                         controller: _noteController,
-                        decoration: const InputDecoration(
-                            hintText: 'contoh: lari sore'),
+                        decoration:
+                            const InputDecoration(hintText: 'contoh: lari sore'),
                       ),
                       const SizedBox(height: 30),
                       FilledButton(
@@ -194,10 +190,10 @@ class _FieldLabel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6, top: 2),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12.5,
           fontWeight: FontWeight.w600,
-          color: Color(0xFF5B6B69),
+          color: context.colors.inkSoft,
         ),
       ),
     );
@@ -215,7 +211,7 @@ class _ActivityTypeSheet extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.colors.surface,
           borderRadius: BorderRadius.circular(18),
         ),
         child: Column(
@@ -226,7 +222,7 @@ class _ActivityTypeSheet extends StatelessWidget {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFFE4EAE9),
+                color: context.colors.line,
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -239,7 +235,7 @@ class _ActivityTypeSheet extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   color: selected?.id == type.id
-                      ? const Color(0xFFEAF7F6)
+                      ? context.colors.tealTint
                       : Colors.transparent,
                   child: Row(
                     children: [

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../db/database_helper.dart';
 import '../models/models.dart';
+import '../theme/app_colors.dart';
 
 const _weekdays = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
 const _months = [
@@ -13,7 +14,6 @@ const _teal = Color(0xFF2EC4B6);
 const _tealDark = Color(0xFF1B9AAA);
 const _orange = Color(0xFFFF8A3D);
 const _green = Color(0xFF22A06B);
-const _inkSoft = Color(0xFF5B6B69);
 
 // Form limits and step sizes.
 const _kcalStep = 50;
@@ -325,7 +325,7 @@ class _CardShell extends StatelessWidget {
       width: double.infinity,
       padding: padding,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -369,7 +369,7 @@ class _ProgressCard extends StatelessWidget {
             children: [
               const Text('Progres hari ini',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-              Text(dateLabel, style: const TextStyle(fontSize: 11, color: _inkSoft)),
+              Text(dateLabel, style: TextStyle(fontSize: 11, color: context.colors.inkSoft)),
             ],
           ),
           const SizedBox(height: 12),
@@ -439,10 +439,10 @@ class _NoTargetBody extends StatelessWidget {
             const Text('Belum ada target hari ini',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Tentuin dulu berapa kalori dan durasi yang mau kamu kejar hari ini.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11.5, height: 1.5, color: _inkSoft),
+              style: TextStyle(fontSize: 11.5, height: 1.5, color: context.colors.inkSoft),
             ),
           ],
         ),
@@ -496,7 +496,7 @@ class _RingItem extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     done ? '$goalText \u2713' : goalText,
-                    style: const TextStyle(fontSize: 9.5, color: _inkSoft),
+                    style: TextStyle(fontSize: 9.5, color: context.colors.inkSoft),
                   ),
                 ],
               ),
@@ -507,11 +507,11 @@ class _RingItem extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 13, color: _inkSoft),
+            Icon(icon, size: 13, color: context.colors.inkSoft),
             const SizedBox(width: 4),
             Text(label,
-                style: const TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w600, color: _inkSoft)),
+                style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w600, color: context.colors.inkSoft)),
           ],
         ),
       ],
@@ -570,7 +570,7 @@ class _StatusBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: achieved ? null : const Color(0xFFEAF7F6),
+        color: achieved ? null : context.colors.tealTint,
         gradient: achieved
             ? const LinearGradient(colors: [Color(0xFF2FBF8A), Color(0xFF1E9E6E)])
             : null,
@@ -624,21 +624,21 @@ class _WeekCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFF1E6),
+                    color: context.colors.streakBg,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.local_fire_department,
-                          size: 12, color: Color(0xFFD9692A)),
+                      Icon(Icons.local_fire_department,
+                          size: 12, color: context.colors.streakText),
                       const SizedBox(width: 3),
                       Text(
                         '$streak hari beruntun',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFFD9692A),
+                          color: context.colors.streakText,
                         ),
                       ),
                     ],
@@ -652,13 +652,13 @@ class _WeekCard extends StatelessWidget {
             child: Stack(
               children: [
                 // The target line: a full-height bar means the day was met.
-                const Positioned(
+                Positioned(
                   top: 4,
                   left: 0,
                   right: 0,
                   child: SizedBox(
                     height: 1.5,
-                    child: CustomPaint(painter: _DashedLinePainter()),
+                    child: CustomPaint(painter: _DashedLinePainter(color: context.colors.lineStrong)),
                   ),
                 ),
                 Positioned.fill(
@@ -692,7 +692,7 @@ class _WeekCard extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 9.5,
-                      color: i == week.length - 1 ? const Color(0xFF14201F) : _inkSoft,
+                      color: i == week.length - 1 ? context.colors.ink : context.colors.inkSoft,
                       fontWeight:
                           i == week.length - 1 ? FontWeight.w800 : FontWeight.normal,
                     ),
@@ -702,7 +702,7 @@ class _WeekCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text('Target tercapai $metCount dari 7 hari',
-              style: const TextStyle(fontSize: 11, color: _inkSoft)),
+              style: TextStyle(fontSize: 11, color: context.colors.inkSoft)),
         ],
       ),
     );
@@ -729,9 +729,9 @@ class _WeekBar extends StatelessWidget {
     } else if (isToday && progress > 0) {
       gradient = const [Color(0xFFFFB27A), _orange];
     } else if (progress > 0) {
-      flat = const Color(0xFFBFE6E1);
+      flat = context.colors.barPartial;
     } else {
-      flat = const Color(0xFFDDE6E4);
+      flat = context.colors.track;
     }
 
     return Align(
@@ -761,12 +761,13 @@ class _WeekBar extends StatelessWidget {
 }
 
 class _DashedLinePainter extends CustomPainter {
-  const _DashedLinePainter();
+  final Color color;
+  const _DashedLinePainter({required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFC9D4D2)
+      ..color = color
       ..strokeWidth = 1.5;
     const dash = 5.0;
     const gap = 4.0;
@@ -776,7 +777,7 @@ class _DashedLinePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_DashedLinePainter old) => false;
+  bool shouldRepaint(_DashedLinePainter old) => old.color != color;
 }
 
 // ---------------------------------------------------------------------------
@@ -826,20 +827,20 @@ class _FormCard extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF7E6),
+                color: context.colors.amberBg,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.lightbulb_outline, size: 14, color: Color(0xFF9A6B14)),
+                  Icon(Icons.lightbulb_outline, size: 14, color: context.colors.amberText),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       prefillNote!,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF9A6B14),
+                        color: context.colors.amberText,
                       ),
                     ),
                   ),
@@ -908,7 +909,7 @@ class _FormCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Center(
-            child: Text(dateNote, style: const TextStyle(fontSize: 10.5, color: _inkSoft)),
+            child: Text(dateNote, style: TextStyle(fontSize: 10.5, color: context.colors.inkSoft)),
           ),
         ],
       ),
@@ -925,7 +926,7 @@ class _PresetCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFEAF7F6) : Colors.white,
+      color: selected ? context.colors.tealTint : context.colors.surface,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -935,7 +936,7 @@ class _PresetCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: selected ? _teal : const Color(0xFFE4EAE9),
+              color: selected ? _teal : context.colors.line,
               width: 1.5,
             ),
           ),
@@ -947,7 +948,7 @@ class _PresetCard extends StatelessWidget {
               Text(
                 '${preset.kcal} kcal\n${preset.minutes} menit',
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 10, height: 1.45, color: _inkSoft),
+                style: TextStyle(fontSize: 10, height: 1.45, color: context.colors.inkSoft),
               ),
             ],
           ),
@@ -1011,8 +1012,8 @@ class _StepperRow extends StatelessWidget {
                 children: [
                   TextSpan(
                     text: unit,
-                    style: const TextStyle(
-                        fontSize: 10, fontWeight: FontWeight.w500, color: _inkSoft),
+                    style: TextStyle(
+                        fontSize: 10, fontWeight: FontWeight.w500, color: context.colors.inkSoft),
                   ),
                 ],
               ),
@@ -1034,10 +1035,10 @@ class _StepButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onTap != null;
     return Material(
-      color: Colors.white,
+      color: context.colors.surface,
       shape: CircleBorder(
         side: BorderSide(
-          color: enabled ? const Color(0xFFD5DEDC) : const Color(0xFFEDF1F0),
+          color: enabled ? context.colors.lineStrong : context.colors.line,
           width: 1.5,
         ),
       ),
@@ -1050,7 +1051,7 @@ class _StepButton extends StatelessWidget {
           child: Icon(
             icon,
             size: 16,
-            color: enabled ? _inkSoft : const Color(0xFFC9D4D2),
+            color: enabled ? context.colors.inkSoft : context.colors.lineStrong,
           ),
         ),
       ),

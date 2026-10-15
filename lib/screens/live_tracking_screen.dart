@@ -13,6 +13,7 @@ import '../services/sync_service.dart';
 import '../services/tracking_task_handler.dart';
 import '../utils/activity_style.dart';
 import '../widgets/step_indicator.dart';
+import '../theme/app_colors.dart';
 
 const _cartoKey = 'cb1_3xnq_1_d5f34b66a55d20c44f8bb363';
 
@@ -123,19 +124,15 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
 
   Future<void> _resumeIfServiceRunning(List<ActivityType> types) async {
     final sessionActive =
-        await FlutterForegroundTask.getData<bool>(key: 'sessionActive') ??
-            false;
+        await FlutterForegroundTask.getData<bool>(key: 'sessionActive') ?? false;
     if (!sessionActive) return;
 
     final isRunning = await FlutterForegroundTask.isRunningService;
-    final typeId =
-        await FlutterForegroundTask.getData<int>(key: 'activityTypeId');
+    final typeId = await FlutterForegroundTask.getData<int>(key: 'activityTypeId');
     final seconds =
-        await FlutterForegroundTask.getData<int>(key: 'accumulatedSeconds') ??
-            0;
-    final distance = await FlutterForegroundTask.getData<double>(
-            key: 'accumulatedDistance') ??
-        0;
+        await FlutterForegroundTask.getData<int>(key: 'accumulatedSeconds') ?? 0;
+    final distance =
+        await FlutterForegroundTask.getData<double>(key: 'accumulatedDistance') ?? 0;
     final movingSeconds = await FlutterForegroundTask.getData<int>(
             key: 'accumulatedMovingSeconds') ??
         0;
@@ -156,8 +153,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       _elapsed = Duration(seconds: seconds);
       _totalDistanceMeters = distance;
       _movingSeconds = movingSeconds;
-      _startedAt =
-          startedAtRaw != null ? DateTime.tryParse(startedAtRaw) : null;
+      _startedAt = startedAtRaw != null ? DateTime.tryParse(startedAtRaw) : null;
       _isRunning = isRunning;
     });
     if (isRunning) _startUiTicker();
@@ -258,8 +254,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'fittrack_tracking',
         channelName: 'Tracking Aktivitas',
-        channelDescription:
-            'Menampilkan status aktivitas yang sedang berlangsung',
+        channelDescription: 'Menampilkan status aktivitas yang sedang berlangsung',
         onlyAlertOnce: true,
       ),
       iosNotificationOptions: const IOSNotificationOptions(),
@@ -273,8 +268,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   }
 
   Future<bool> _ensurePermissions() async {
-    final notifPermission =
-        await FlutterForegroundTask.checkNotificationPermission();
+    final notifPermission = await FlutterForegroundTask.checkNotificationPermission();
     if (notifPermission != NotificationPermission.granted) {
       await FlutterForegroundTask.requestNotificationPermission();
     }
@@ -447,7 +441,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
           children: [
             TileLayer(
               urlTemplate:
-                  'https://basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}.png?key=$_cartoKey',
+                  'https://basemaps.cartocdn.com/rastertiles/${context.isDark ? 'dark' : 'light'}_nolabels/{z}/{x}/{y}.png?key=$_cartoKey',
               userAgentPackageName: 'com.gilangarya.fittrack',
             ),
             if (_routePoints.length > 1)
@@ -517,8 +511,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
             child: Text(
               _locationError!,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.w600),
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
             ),
           ),
       ],
@@ -531,8 +524,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     final elapsed = _displayElapsed;
     final progress = started ? (elapsed.inSeconds % 60) / 60 : 0.0;
     final rate = _selectedType?.caloriesPerMinute ?? 0;
-    final rateText =
-        rate % 1 == 0 ? rate.toStringAsFixed(0) : rate.toStringAsFixed(1);
+    final rateText = rate % 1 == 0 ? rate.toStringAsFixed(0) : rate.toStringAsFixed(1);
 
     final Color? dotColor = _isRunning
         ? const Color(0xFF4ADE80)
@@ -562,8 +554,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   children: [
                     CustomPaint(
                       size: const Size(220, 220),
-                      painter:
-                          _RingPainter(progress: progress, color: style.color),
+                      painter: _RingPainter(progress: progress, color: style.color),
                     ),
                     Column(
                       mainAxisSize: MainAxisSize.min,
@@ -580,9 +571,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                               ),
                               const SizedBox(width: 6),
                             ],
-                            const Text('Durasi',
+                            Text('Durasi',
                                 style: TextStyle(
-                                    fontSize: 11.5, color: Color(0xFF5B6B69))),
+                                    fontSize: 11.5, color: context.colors.inkSoft)),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -624,9 +615,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              const Text(
+              Text(
                 'Kalori dihitung dari durasi (tanpa GPS)',
-                style: TextStyle(fontSize: 10.5, color: Color(0xFF5B6B69)),
+                style: TextStyle(fontSize: 10.5, color: context.colors.inkSoft),
               ),
             ],
           ),
@@ -640,8 +631,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   Widget _buildBottomPanel(ActivityStyle style, bool started) {
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: context.colors.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: [
           BoxShadow(
@@ -658,9 +649,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
           if (_usesMap) ...[
             Row(
               children: [
-                _Stat(
-                    label: '\u23f1 Durasi',
-                    value: _formatDuration(_displayElapsed)),
+                _Stat(label: '\u23f1 Durasi', value: _formatDuration(_displayElapsed)),
                 const _StatDivider(),
                 _Stat(label: '\u26a1 Pace', value: _paceLabel),
                 const _StatDivider(),
@@ -677,16 +666,16 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFFF5F7FA),
+                color: context.colors.bg,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE4EAE9)),
+                border: Border.all(color: context.colors.line),
               ),
               child: TextField(
                 controller: _noteController,
                 style: const TextStyle(fontSize: 12.5),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Catatan (opsional)',
-                  hintStyle: TextStyle(color: Color(0xFF5B6B69)),
+                  hintStyle: TextStyle(color: context.colors.inkSoft),
                   border: InputBorder.none,
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(vertical: 12),
@@ -716,7 +705,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     onPressed: _saving ? null : (_isRunning ? _pause : _start),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: const BorderSide(color: Color(0xFFE4EAE9)),
+                      side: BorderSide(color: context.colors.line),
                     ),
                     child: Text(_isRunning ? 'Jeda' : 'Lanjut'),
                   ),
@@ -753,8 +742,7 @@ class _TopBar extends StatelessWidget {
   final String title;
   final ActivityStyle style;
   final VoidCallback onBack;
-  const _TopBar(
-      {required this.title, required this.style, required this.onBack});
+  const _TopBar({required this.title, required this.style, required this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -778,8 +766,7 @@ class _TopBar extends StatelessWidget {
                     title,
                     textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w700),
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                 ),
               ],
@@ -801,7 +788,7 @@ class _TypePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.94),
+      color: context.colors.surface.withValues(alpha: 0.94),
       borderRadius: BorderRadius.circular(14),
       elevation: 4,
       shadowColor: Colors.black26,
@@ -817,8 +804,7 @@ class _TypePill extends StatelessWidget {
             ),
             const SizedBox(width: 9),
             Text(name,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w700, fontSize: 12.5)),
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
           ],
         ),
       ),
@@ -836,7 +822,7 @@ class _FocusTypeChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 6, 14, 6),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -856,8 +842,7 @@ class _FocusTypeChip extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(name,
-              style:
-                  const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
         ],
       ),
     );
@@ -919,8 +904,7 @@ class _MiniStat extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  const _MiniStat(
-      {required this.icon, required this.label, required this.value});
+  const _MiniStat({required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -928,7 +912,7 @@ class _MiniStat extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.colors.surface,
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
@@ -943,19 +927,17 @@ class _MiniStat extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 11, color: const Color(0xFF5B6B69)),
+                Icon(icon, size: 11, color: context.colors.inkSoft),
                 const SizedBox(width: 3),
                 Text(label,
-                    style: const TextStyle(
-                        fontSize: 10, color: Color(0xFF5B6B69))),
+                    style: TextStyle(fontSize: 10, color: context.colors.inkSoft)),
               ],
             ),
             const SizedBox(height: 4),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(value,
-                  style: const TextStyle(
-                      fontSize: 15.5, fontWeight: FontWeight.bold)),
+                  style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -999,7 +981,7 @@ class _RoundIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: context.colors.surface,
       shape: const CircleBorder(),
       elevation: 4,
       shadowColor: Colors.black26,
@@ -1008,7 +990,7 @@ class _RoundIconButton extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(9),
-          child: Icon(icon, size: 18, color: const Color(0xFF14201F)),
+          child: Icon(icon, size: 18, color: context.colors.ink),
         ),
       ),
     );
@@ -1026,11 +1008,10 @@ class _Stat extends StatelessWidget {
       child: Column(
         children: [
           Text(label,
-              style: const TextStyle(fontSize: 10.5, color: Color(0xFF5B6B69))),
+              style: TextStyle(fontSize: 10.5, color: context.colors.inkSoft)),
           const SizedBox(height: 4),
           Text(value,
-              style:
-                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -1042,6 +1023,6 @@ class _StatDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(width: 1, height: 30, color: const Color(0xFFE4EAE9));
+    return Container(width: 1, height: 30, color: context.colors.line);
   }
 }

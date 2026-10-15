@@ -248,6 +248,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.2"
+  light:
+    dependency: "direct main"
+    description:
+      name: light
+      sha256: e1f9b09222881390203a3f31ab2a19e1375e067840018bbdb49a8716e849bdcb
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.0.0"
   lints:
     dependency: transitive
     description:

@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../services/api_client.dart';
 import '../services/pull_sync_service.dart';
 import 'main_navigation_screen.dart';
+import '../theme/app_colors.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -165,17 +166,17 @@ class _StyledTextFieldState extends State<_StyledTextField> {
           padding: const EdgeInsets.only(bottom: 6),
           child: Text(
             widget.label,
-            style: const TextStyle(
-                fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF5B6B69)),
+            style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.inkSoft),
           ),
         ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.colors.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: isFocused ? const Color(0xFF2EC4B6) : const Color(0xFFE4EAE9),
+              color: isFocused ? const Color(0xFF2EC4B6) : context.colors.line,
               width: 1.5,
             ),
           ),
@@ -197,7 +198,7 @@ class _StyledTextFieldState extends State<_StyledTextField> {
                   style: const TextStyle(fontSize: 13.5),
                   decoration: InputDecoration(
                     hintText: widget.hint,
-                    hintStyle: const TextStyle(color: Color(0xFFA7B3B1)),
+                    hintStyle: TextStyle(color: context.colors.hint),
                     border: InputBorder.none,
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
@@ -210,7 +211,7 @@ class _StyledTextFieldState extends State<_StyledTextField> {
                   child: Icon(
                     _obscured ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                     size: 16,
-                    color: const Color(0xFFB7C2C0),
+                    color: context.colors.iconMuted,
                   ),
                 ),
             ],

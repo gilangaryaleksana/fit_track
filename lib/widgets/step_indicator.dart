@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 /// Two small bars showing progress through the live-activity flow
 /// (1 = pick a type, 2 = tracking).
@@ -12,7 +13,7 @@ class StepIndicator extends StatelessWidget {
           width: 28,
           height: 4,
           decoration: BoxDecoration(
-            color: done ? const Color(0xFF2EC4B6) : const Color(0xFFE4EAE9),
+            color: done ? const Color(0xFF2EC4B6) : context.colors.line,
             borderRadius: BorderRadius.circular(4),
           ),
         );
