@@ -100,7 +100,7 @@ class _ActivityTypePickerScreenState extends State<ActivityTypePickerScreen> {
                   backgroundColor: const Color(0xFF2EC4B6),
                   padding: const EdgeInsets.symmetric(vertical: 15),
                 ),
-                child: const Text('Lanjut ke Tracking \u2192'),
+                child: const Text('Next \u2192'),
               ),
               const SizedBox(height: 12),
               const StepIndicator(step: 1),

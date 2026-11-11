@@ -633,12 +633,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
       decoration: BoxDecoration(
         color: context.colors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        boxShadow: [
+        borderRadius: const BorderRadius.vertical(top: const Radius.circular(24)),
+        boxShadow: const [
           BoxShadow(
-            color: Color(0x14142020),
+            color: const Color(0x14142020),
             blurRadius: 24,
-            offset: Offset(0, -10),
+            offset: const Offset(0, -10),
           ),
         ],
       ),
@@ -678,7 +678,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   hintStyle: TextStyle(color: context.colors.inkSoft),
                   border: InputBorder.none,
                   isDense: true,
-                  contentPadding: EdgeInsets.symmetric(vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
             ),

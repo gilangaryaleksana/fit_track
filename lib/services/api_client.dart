@@ -18,9 +18,8 @@ class ApiClient {
   ApiClient._internal();
   static final ApiClient instance = ApiClient._internal();
 
-  // TODO: ganti sesuai IP laptop kamu (cek lewat ipconfig / ifconfig).
-  // Harus sejaringan WiFi yang sama dengan HP saat testing.
-  static const String baseUrl = 'http://192.168.1.8:8000/api';
+  // Update this when the ngrok tunnel URL changes.
+  static const String baseUrl = 'https://modified-outgrow-sasquatch.ngrok-free.dev/api';
 
   String? _token;
 

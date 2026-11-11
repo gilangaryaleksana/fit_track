@@ -198,7 +198,7 @@ class HomeScreenState extends State<HomeScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
-        label: const Text('Tambah Aktivitas'),
+        label: const Text('Mulai Aktivitas'),
         onPressed: _startActivity,
       ),
     );

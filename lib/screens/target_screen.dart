@@ -316,8 +316,7 @@ class _CardShell extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   const _CardShell({
     required this.child,
-    this.padding = const EdgeInsets.fromLTRB(16, 14, 16, 14),
-  });
+  }) : padding = const EdgeInsets.fromLTRB(16, 14, 16, 14);
 
   @override
   Widget build(BuildContext context) {

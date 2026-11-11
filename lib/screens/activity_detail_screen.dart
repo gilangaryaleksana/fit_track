@@ -425,12 +425,12 @@ class _TimeHero extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
+                    const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.timer_outlined, size: 14, color: Colors.white70),
-                        const SizedBox(width: 6),
-                        const Text(
+                        Icon(Icons.timer_outlined, size: 14, color: Colors.white70),
+                        SizedBox(width: 6),
+                        Text(
                           'DURASI',
                           style: TextStyle(
                             fontSize: 11,

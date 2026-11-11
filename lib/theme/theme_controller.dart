@@ -72,7 +72,7 @@ class ThemeController with WidgetsBindingObserver {
 
     // First reading: decide right away instead of waiting out the settle time.
     if (mode.value == ThemeMode.system) {
-      final midpoint = (darkBelowLux + lightAboveLux) / 2;
+      const midpoint = (darkBelowLux + lightAboveLux) / 2;
       _apply(dark: _lastLux! < midpoint);
       return;
     }
