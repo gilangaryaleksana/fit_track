@@ -98,9 +98,9 @@ class _ActivityTypePickerScreenState extends State<ActivityTypePickerScreen> {
                 onPressed: _selected == null ? null : _continue,
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF2EC4B6),
-                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
                 ),
-                child: const Text('Next \u2192'),
+                child: const Text('Selanjutnya \u2192'),
               ),
               const SizedBox(height: 12),
               const StepIndicator(step: 1),
