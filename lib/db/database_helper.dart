@@ -267,6 +267,17 @@ class DatabaseHelper {
     return result.map((e) => Activity.fromMap(e)).toList();
   }
 
+  Future<List<Activity>> getPendingActivitiesByUser(int userId) async {
+    final db = await database;
+    final result = await db.query(
+      'activities',
+      where: 'user_id = ? AND server_id IS NULL',
+      whereArgs: [userId],
+      orderBy: 'date ASC',
+    );
+    return result.map((e) => Activity.fromMap(e)).toList();
+  }
+
   Future<List<Activity>> getActivitiesByDate(int userId, DateTime date) async {
     final db = await database;
     final dateStr = date.toIso8601String().substring(0, 10);

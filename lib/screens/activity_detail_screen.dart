@@ -14,7 +14,8 @@ const _cartoKey = 'cb1_3xnq_1_d5f34b66a55d20c44f8bb363';
 class ActivityDetailScreen extends StatefulWidget {
   final Activity activity;
   final ActivityType? type;
-  const ActivityDetailScreen({super.key, required this.activity, required this.type});
+  const ActivityDetailScreen(
+      {super.key, required this.activity, required this.type});
 
   @override
   State<ActivityDetailScreen> createState() => _ActivityDetailScreenState();
@@ -22,15 +23,29 @@ class ActivityDetailScreen extends StatefulWidget {
 
 class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   final _db = DatabaseHelper.instance;
+  final _mapController = MapController();
   List<RoutePoint> _routePoints = [];
   int? _serverId;
   bool _loading = true;
   bool _deleting = false;
+  double? _minMapZoom;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  void _setMinimumMapZoom() {
+    final minZoom = (_mapController.camera.zoom - 2).clamp(0, 17).toDouble();
+    if (!mounted || minZoom == _minMapZoom) return;
+    setState(() => _minMapZoom = minZoom);
   }
 
   Future<void> _load() async {
@@ -60,7 +75,10 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     final dLng = _deg2rad(b.longitude - a.longitude);
 
     final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1) * math.cos(lat2) * math.sin(dLng / 2) * math.sin(dLng / 2);
+        math.cos(lat1) *
+            math.cos(lat2) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
     final c = 2 * math.atan2(math.sqrt(h), math.sqrt(1 - h));
     return earthRadius * c;
   }
@@ -71,7 +89,8 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   String get _caloriesPerMinuteLabel {
     final minutes = widget.activity.durationMinutes;
     if (minutes <= 0) return '0';
-    final rate = double.parse((widget.activity.caloriesBurned / minutes).toStringAsFixed(1));
+    final rate = double.parse(
+        (widget.activity.caloriesBurned / minutes).toStringAsFixed(1));
     return rate % 1 == 0 ? rate.toStringAsFixed(0) : rate.toStringAsFixed(1);
   }
 
@@ -91,7 +110,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         title: const Text('Hapus Aktivitas?'),
         content: const Text('Data ini akan dihapus permanen dari HP kamu.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Hapus', style: TextStyle(color: Colors.red)),
@@ -114,6 +135,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         ? styleForActivity(widget.type!.name)
         : const ActivityStyle(Icons.sports, Colors.teal);
     final hasRoute = _routePoints.length > 1;
+    final routeCoordinates = _routePoints
+        .map((point) => ll.LatLng(point.latitude, point.longitude))
+        .toList();
     // Swimming/yoga/gym never record a route, so "no GPS data" would be
     // misleading for them: they get a time-focused layout instead.
     final timeFocused = !style.usesMap;
@@ -144,19 +168,29 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(18),
                     child: SizedBox(
-                      height: 160,
+                      height: MediaQuery.sizeOf(context).height * 0.5,
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
                           FlutterMap(
+                            mapController: _mapController,
                             options: MapOptions(
                               initialCenter: ll.LatLng(
                                 _routePoints[_routePoints.length ~/ 2].latitude,
-                                _routePoints[_routePoints.length ~/ 2].longitude,
+                                _routePoints[_routePoints.length ~/ 2]
+                                    .longitude,
                               ),
                               initialZoom: 14,
+                              initialCameraFit: CameraFit.coordinates(
+                                coordinates: routeCoordinates,
+                                padding: const EdgeInsets.all(24),
+                                maxZoom: 17,
+                              ),
+                              minZoom: _minMapZoom,
+                              onMapReady: _setMinimumMapZoom,
                               interactionOptions: const InteractionOptions(
-                                flags: InteractiveFlag.pinchZoom | InteractiveFlag.drag,
+                                flags: InteractiveFlag.pinchZoom |
+                                    InteractiveFlag.drag,
                               ),
                             ),
                             children: [
@@ -167,9 +201,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                               ),
                               PolylineLayer(polylines: [
                                 Polyline(
-                                  points: _routePoints
-                                      .map((p) => ll.LatLng(p.latitude, p.longitude))
-                                      .toList(),
+                                  points: routeCoordinates,
                                   color: style.color,
                                   strokeWidth: 4,
                                   strokeCap: StrokeCap.round,
@@ -178,28 +210,30 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                               ]),
                               MarkerLayer(markers: [
                                 Marker(
-                                  point: ll.LatLng(
-                                      _routePoints.first.latitude, _routePoints.first.longitude),
+                                  point: ll.LatLng(_routePoints.first.latitude,
+                                      _routePoints.first.longitude),
                                   width: 14,
                                   height: 14,
                                   child: Container(
                                     decoration: BoxDecoration(
                                       color: const Color(0xFF2EC4B6),
                                       shape: BoxShape.circle,
-                                      border: Border.all(color: Colors.white, width: 2),
+                                      border: Border.all(
+                                          color: Colors.white, width: 2),
                                     ),
                                   ),
                                 ),
                                 Marker(
-                                  point: ll.LatLng(
-                                      _routePoints.last.latitude, _routePoints.last.longitude),
+                                  point: ll.LatLng(_routePoints.last.latitude,
+                                      _routePoints.last.longitude),
                                   width: 14,
                                   height: 14,
                                   child: Container(
                                     decoration: BoxDecoration(
                                       color: style.color,
                                       shape: BoxShape.circle,
-                                      border: Border.all(color: Colors.white, width: 2),
+                                      border: Border.all(
+                                          color: Colors.white, width: 2),
                                     ),
                                   ),
                                 ),
@@ -211,12 +245,55 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                             right: 10,
                             child: _SyncChip(synced: _serverId != null),
                           ),
+                          Positioned(
+                            right: 10,
+                            bottom: 10,
+                            child: Material(
+                              color: context.colors.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              elevation: 3,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Perbesar peta',
+                                    visualDensity: VisualDensity.compact,
+                                    icon: const Icon(Icons.add),
+                                    onPressed: () {
+                                      final camera = _mapController.camera;
+                                      _mapController.move(
+                                        camera.center,
+                                        (camera.zoom + 1)
+                                            .clamp(0, 18)
+                                            .toDouble(),
+                                      );
+                                    },
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Perkecil peta',
+                                    visualDensity: VisualDensity.compact,
+                                    icon: const Icon(Icons.remove),
+                                    onPressed: () {
+                                      final camera = _mapController.camera;
+                                      _mapController.move(
+                                        camera.center,
+                                        (camera.zoom - 1)
+                                            .clamp(camera.minZoom ?? 0, 18)
+                                            .toDouble(),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   )
                 else if (timeFocused)
-                  _TimeHero(style: style, minutes: widget.activity.durationMinutes)
+                  _TimeHero(
+                      style: style, minutes: widget.activity.durationMinutes)
                 else
                   Container(
                     height: 160,
@@ -228,15 +305,16 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(style.icon, size: 30, color: context.colors.lineStrong),
+                        Icon(style.icon,
+                            size: 30, color: context.colors.lineStrong),
                         const SizedBox(height: 8),
                         Text('Tidak ada data rute GPS',
-                            style: TextStyle(color: context.colors.inkSoft, fontSize: 12.5)),
+                            style: TextStyle(
+                                color: context.colors.inkSoft, fontSize: 12.5)),
                       ],
                     ),
                   ),
                 const SizedBox(height: 16),
-
                 Row(
                   children: [
                     CircleAvatar(
@@ -262,7 +340,6 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-
                 GridView.count(
                   crossAxisCount: 2,
                   shrinkWrap: true,
@@ -276,7 +353,8 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                       _StatTile(
                         icon: Icons.local_fire_department_outlined,
                         label: 'Kalori',
-                        value: '${widget.activity.caloriesBurned.toStringAsFixed(0)} kcal',
+                        value:
+                            '${widget.activity.caloriesBurned.toStringAsFixed(0)} kcal',
                       ),
                       _StatTile(
                         icon: Icons.bolt_outlined,
@@ -293,7 +371,8 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                         _StatTile(
                           icon: Icons.location_on_outlined,
                           label: 'Jarak',
-                          value: '${(_distanceMeters / 1000).toStringAsFixed(2)} km',
+                          value:
+                              '${(_distanceMeters / 1000).toStringAsFixed(2)} km',
                         ),
                         _StatTile(
                           icon: Icons.bolt_outlined,
@@ -304,13 +383,13 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                       _StatTile(
                         icon: Icons.local_fire_department_outlined,
                         label: 'Kalori',
-                        value: '${widget.activity.caloriesBurned.toStringAsFixed(0)} kcal',
+                        value:
+                            '${widget.activity.caloriesBurned.toStringAsFixed(0)} kcal',
                       ),
                     ],
                   ],
                 ),
                 const SizedBox(height: 14),
-
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
@@ -346,7 +425,6 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Row(
@@ -358,11 +436,14 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                             : (timeFocused
                                 ? 'Kalori dihitung dari durasi'
                                 : 'Jenis: Input Manual'),
-                        style: TextStyle(fontSize: 11.5, color: context.colors.inkSoft),
+                        style: TextStyle(
+                            fontSize: 11.5, color: context.colors.inkSoft),
                       ),
                       if (!hasRoute)
                         Text(
-                          _serverId != null ? '\u2601\ufe0f Tersinkron' : '\u2601\ufe0f Belum sinkron',
+                          _serverId != null
+                              ? '\u2601\ufe0f Tersinkron'
+                              : '\u2601\ufe0f Belum sinkron',
                           style: TextStyle(
                             fontSize: 11.5,
                             color: _serverId != null
@@ -372,7 +453,8 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                         )
                       else
                         Text('${_routePoints.length} titik GPS',
-                            style: TextStyle(fontSize: 11.5, color: context.colors.inkSoft)),
+                            style: TextStyle(
+                                fontSize: 11.5, color: context.colors.inkSoft)),
                     ],
                   ),
                 ),
@@ -417,7 +499,8 @@ class _TimeHero extends StatelessWidget {
             Positioned(
               right: -18,
               bottom: -22,
-              child: Icon(style.icon, size: 130, color: Colors.white.withValues(alpha: 0.14)),
+              child: Icon(style.icon,
+                  size: 130, color: Colors.white.withValues(alpha: 0.14)),
             ),
             Center(
               child: Padding(
@@ -428,7 +511,8 @@ class _TimeHero extends StatelessWidget {
                     const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.timer_outlined, size: 14, color: Colors.white70),
+                        Icon(Icons.timer_outlined,
+                            size: 14, color: Colors.white70),
                         SizedBox(width: 6),
                         Text(
                           'DURASI',
@@ -480,7 +564,9 @@ class _SyncChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.cloud_outlined,
-              size: 13, color: synced ? const Color(0xFF1B9AAA) : const Color(0xFFB7914A)),
+              size: 13,
+              color:
+                  synced ? const Color(0xFF1B9AAA) : const Color(0xFFB7914A)),
           const SizedBox(width: 5),
           Text(
             synced ? 'Tersinkron' : 'Belum sinkron',
@@ -500,7 +586,8 @@ class _StatTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  const _StatTile({required this.icon, required this.label, required this.value});
+  const _StatTile(
+      {required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -518,12 +605,15 @@ class _StatTile extends StatelessWidget {
             children: [
               Icon(icon, size: 13, color: context.colors.inkSoft),
               const SizedBox(width: 5),
-              Text(label, style: TextStyle(fontSize: 11, color: context.colors.inkSoft)),
+              Text(label,
+                  style:
+                      TextStyle(fontSize: 11, color: context.colors.inkSoft)),
             ],
           ),
           const SizedBox(height: 6),
           Text(value,
-              style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold)),
+              style:
+                  const TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold)),
         ],
       ),
     );

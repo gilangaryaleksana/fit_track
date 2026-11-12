@@ -54,10 +54,10 @@ class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key, required this.userId});
 
   @override
-  State<HistoryScreen> createState() => _HistoryScreenState();
+  State<HistoryScreen> createState() => HistoryScreenState();
 }
 
-class _HistoryScreenState extends State<HistoryScreen> {
+class HistoryScreenState extends State<HistoryScreen> {
   final _db = DatabaseHelper.instance;
 
   List<Activity> _activities = [];
@@ -71,10 +71,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    loadData();
   }
 
-  Future<void> _loadData() async {
+  Future<void> loadData() async {
+    await _loadLocalData();
+    final syncedAny =
+        await SyncService.instance.syncPendingActivities(widget.userId);
+    if (syncedAny) await _loadLocalData();
+  }
+
+  Future<void> _loadLocalData() async {
     final activities = await _db.getActivitiesByUser(widget.userId);
     final types = await _db.getActivityTypes();
     final routeIds = await _db.getActivityIdsWithRoute(widget.userId);
@@ -99,7 +106,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     await _db.deleteActivity(activity.id!);
     if (serverId != null) SyncService.instance.deleteRemote(serverId);
 
-    _loadData();
+    loadData();
   }
 
   Future<void> _openDetail(Activity activity) async {
@@ -112,7 +119,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ),
       ),
     );
-    _loadData();
+    loadData();
   }
 
   List<Object> _buildRows(List<Activity> list) {
@@ -139,7 +146,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       return _EmptyHistory(
         onStart: () async {
           await startActivityFlow(context, widget.userId);
-          _loadData();
+          loadData();
         },
       );
     }
@@ -157,7 +164,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final rows = _buildRows(visible);
 
     return RefreshIndicator(
-      onRefresh: _loadData,
+      onRefresh: loadData,
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [

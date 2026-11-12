@@ -21,6 +21,7 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final _pageController = PageController();
   final _homeKey = GlobalKey<HomeScreenState>();
+  final _historyKey = GlobalKey<HistoryScreenState>();
   int _index = 0;
 
   static const _titles = [
@@ -92,6 +93,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         onPageChanged: (i) {
           setState(() => _index = i);
           if (i == 0) _homeKey.currentState?.loadData();
+          if (i == 1) _historyKey.currentState?.loadData();
         },
         children: [
           HomeScreen(
@@ -100,7 +102,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             onGoToTarget: () => _goToTab(2),
             onGoToHistory: () => _goToTab(1),
           ),
-          HistoryScreen(userId: widget.userId),
+          HistoryScreen(key: _historyKey, userId: widget.userId),
           TargetScreen(userId: widget.userId),
         ],
       ),

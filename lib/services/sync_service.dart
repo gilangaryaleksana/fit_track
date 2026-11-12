@@ -12,12 +12,16 @@ class SyncService {
   static final SyncService instance = SyncService._();
 
   List<dynamic>? _serverActivityTypesCache;
+  final Set<int> _syncingActivityIds = {};
 
   Future<int?> _serverActivityTypeId(String name) async {
     try {
-      _serverActivityTypesCache ??=
-          (await ApiClient.instance.get('activity-types?per_page=50'))['data'] as List<dynamic>;
-      for (final t in _serverActivityTypesCache!) {
+      final types = _serverActivityTypesCache ??
+          (await ApiClient.instance.get(
+            'activity-types?per_page=50',
+          ))['data'] as List<dynamic>;
+      if (types.isNotEmpty) _serverActivityTypesCache = types;
+      for (final t in types) {
         if ((t['name'] as String).toLowerCase() == name.toLowerCase()) {
           return t['id'] as int;
         }
@@ -26,6 +30,32 @@ class SyncService {
       // No connection / not logged in — caller's try/catch handles this.
     }
     return null;
+  }
+
+  Future<bool> syncPendingActivities(int userId) async {
+    if (!await ApiClient.instance.isLoggedIn) return false;
+
+    final db = DatabaseHelper.instance;
+    final types = await db.getActivityTypes();
+    final typesById = {for (final type in types) type.id!: type};
+    final pending = await db.getPendingActivitiesByUser(userId);
+    var syncedAny = false;
+
+    for (final activity in pending) {
+      final type = typesById[activity.activityTypeId];
+      if (type == null) continue;
+
+      final routePoints = await db.getRoutePoints(activity.id!);
+      syncedAny = await syncActivity(
+            localActivityId: activity.id!,
+            activity: activity,
+            activityTypeName: type.name,
+            routePoints: routePoints,
+          ) ||
+          syncedAny;
+    }
+
+    return syncedAny;
   }
 
   double _totalDistanceMeters(List<RoutePoint> points) {
@@ -53,18 +83,20 @@ class SyncService {
     }
   }
 
-  Future<void> syncActivity({
+  Future<bool> syncActivity({
     required int localActivityId,
     required Activity activity,
     required String activityTypeName,
     List<RoutePoint> routePoints = const [],
   }) async {
+    if (!_syncingActivityIds.add(localActivityId)) return false;
+
     try {
       final loggedIn = await ApiClient.instance.isLoggedIn;
-      if (!loggedIn) return;
+      if (!loggedIn) return false;
 
       final typeId = await _serverActivityTypeId(activityTypeName);
-      if (typeId == null) return;
+      if (typeId == null) return false;
 
       final distanceMeters = _totalDistanceMeters(routePoints);
       final seconds = activity.durationMinutes * 60;
@@ -108,13 +140,21 @@ class SyncService {
             },
         ];
 
-        await ApiClient.instance.post('activity-streams/bulk', {
-          'activity_id': serverActivityId,
-          'points': points,
-        });
+        try {
+          await ApiClient.instance.post('activity-streams/bulk', {
+            'activity_id': serverActivityId,
+            'points': points,
+          });
+        } catch (_) {
+          // The activity itself remains synced if its route upload fails.
+        }
       }
+      return true;
     } catch (_) {
       // Best-effort only — see class doc comment above.
+      return false;
+    } finally {
+      _syncingActivityIds.remove(localActivityId);
     }
   }
 }
