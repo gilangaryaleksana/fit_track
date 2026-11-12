@@ -270,7 +270,7 @@ class _TargetScreenState extends State<TargetScreen> {
       onRefresh: _loadData,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
         children: [
           _ProgressCard(
             today: today,

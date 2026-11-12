@@ -8,6 +8,41 @@ import '../services/pull_sync_service.dart';
 import 'main_navigation_screen.dart';
 import '../theme/app_colors.dart';
 
+String? _validateGmail(String? value) {
+  final email = value?.trim() ?? '';
+  if (email.isEmpty) return 'Wajib diisi';
+  if (!RegExp(r'^[A-Z0-9._%+-]+@gmail\.com$', caseSensitive: false)
+      .hasMatch(email)) {
+    return 'Gunakan alamat email @gmail.com yang valid';
+  }
+  return null;
+}
+
+String? _validateLogin(String? value) {
+  final login = value?.trim() ?? '';
+  if (login.isEmpty) return 'Wajib diisi';
+  return login.contains('@') ? _validateGmail(login) : null;
+}
+
+String? _validateMeasurement(
+  String? value, {
+  required double min,
+  required double max,
+  required String label,
+  required String unit,
+}) {
+  final measurement = double.tryParse(value?.trim() ?? '');
+  if (measurement == null || !measurement.isFinite) {
+    return 'Masukkan angka $label yang valid';
+  }
+  if (measurement < min || measurement > max) {
+    final minimum = min == min.roundToDouble() ? min.toInt() : min;
+    final maximum = max == max.roundToDouble() ? max.toInt() : max;
+    return '$label harus antara $minimum–$maximum $unit';
+  }
+  return null;
+}
+
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
 
@@ -268,8 +303,8 @@ class _LoginFormState extends State<_LoginForm> {
             controller: _loginController,
             label: 'Email atau Username',
             icon: Icons.person_outline,
-            hint: 'gilang',
-            validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
+            hint: 'JhonDoe / jhon.doe@gmail.com',
+            validator: _validateLogin,
           ),
           const SizedBox(height: 14),
           _StyledTextField(
@@ -359,7 +394,7 @@ class _RegisterFormState extends State<_RegisterForm> {
             controller: _nameController,
             label: 'Nama',
             icon: Icons.badge_outlined,
-            hint: 'Gilang Arya',
+            hint: 'Jhon Doe / Jhon',
             validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
           ),
           const SizedBox(height: 14),
@@ -367,7 +402,7 @@ class _RegisterFormState extends State<_RegisterForm> {
             controller: _usernameController,
             label: 'Username',
             icon: Icons.alternate_email,
-            hint: 'gilang',
+            hint: 'JhonDoe',
             validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
           ),
           const SizedBox(height: 14),
@@ -375,9 +410,9 @@ class _RegisterFormState extends State<_RegisterForm> {
             controller: _emailController,
             label: 'Email',
             icon: Icons.mail_outline,
-            hint: 'nama@email.com',
+            hint: 'jhon.doe@gmail.com',
             keyboardType: TextInputType.emailAddress,
-            validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
+            validator: _validateGmail,
           ),
           const SizedBox(height: 14),
           _StyledTextField(
@@ -399,8 +434,15 @@ class _RegisterFormState extends State<_RegisterForm> {
                   label: 'Tinggi (cm)',
                   icon: Icons.straighten,
                   hint: '170',
-                  keyboardType: TextInputType.number,
-                  validator: (v) => double.tryParse(v ?? '') == null ? 'Angka' : null,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  validator: (v) => _validateMeasurement(
+                    v,
+                    min: 50,
+                    max: 250,
+                    label: 'Tinggi',
+                    unit: 'cm',
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -410,8 +452,15 @@ class _RegisterFormState extends State<_RegisterForm> {
                   label: 'Berat (kg)',
                   icon: Icons.monitor_weight_outlined,
                   hint: '65',
-                  keyboardType: TextInputType.number,
-                  validator: (v) => double.tryParse(v ?? '') == null ? 'Angka' : null,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  validator: (v) => _validateMeasurement(
+                    v,
+                    min: 10,
+                    max: 300,
+                    label: 'Berat',
+                    unit: 'kg',
+                  ),
                 ),
               ),
             ],

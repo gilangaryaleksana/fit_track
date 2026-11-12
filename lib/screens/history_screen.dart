@@ -143,11 +143,14 @@ class HistoryScreenState extends State<HistoryScreen> {
     if (!_loaded) return const Center(child: CircularProgressIndicator());
 
     if (_activities.isEmpty) {
-      return _EmptyHistory(
-        onStart: () async {
-          await startActivityFlow(context, widget.userId);
-          loadData();
-        },
+      return Padding(
+        padding: const EdgeInsets.only(top: 16),
+        child: _EmptyHistory(
+          onStart: () async {
+            await startActivityFlow(context, widget.userId);
+            loadData();
+          },
+        ),
       );
     }
 
@@ -170,7 +173,7 @@ class HistoryScreenState extends State<HistoryScreen> {
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: Column(
                 children: [
                   _SummaryCard(

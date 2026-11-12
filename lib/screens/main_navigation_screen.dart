@@ -6,10 +6,10 @@ import 'auth_screen.dart';
 import 'history_screen.dart';
 import 'home_screen.dart';
 import 'target_screen.dart';
+import '../theme/app_colors.dart';
 
-/// Owns the shared AppBar + bottom NavigationBar so the footer stays
-/// visible across all three tabs. Switching tabs slides the PageView
-/// instead of pushing a whole new route.
+/// Owns the bottom NavigationBar across all three tabs. Switching tabs slides
+/// the PageView instead of pushing a whole new route.
 class MainNavigationScreen extends StatefulWidget {
   final int userId;
   const MainNavigationScreen({super.key, required this.userId});
@@ -23,12 +23,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final _homeKey = GlobalKey<HomeScreenState>();
   final _historyKey = GlobalKey<HistoryScreenState>();
   int _index = 0;
-
-  static const _titles = [
-    'Tracking Kesehatan',
-    'Riwayat Aktivitas',
-    'Target Harian'
-  ];
 
   void _goToTab(int i) {
     setState(() => _index = i);
@@ -75,36 +69,61 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
+  Future<void> _openSettingsMenu() async {
+    final shouldLogout = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Pengaturan',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.logout, color: context.colors.inkSoft),
+                title: const Text('Keluar dari akun'),
+                onTap: () => Navigator.pop(context, true),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (shouldLogout == true && mounted) await _logout();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_titles[_index]),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Keluar',
-            onPressed: _logout,
-          ),
-        ],
-      ),
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: (i) {
-          setState(() => _index = i);
-          if (i == 0) _homeKey.currentState?.loadData();
-          if (i == 1) _historyKey.currentState?.loadData();
-        },
-        children: [
-          HomeScreen(
-            key: _homeKey,
-            userId: widget.userId,
-            onGoToTarget: () => _goToTab(2),
-            onGoToHistory: () => _goToTab(1),
-          ),
-          HistoryScreen(key: _historyKey, userId: widget.userId),
-          TargetScreen(userId: widget.userId),
-        ],
+      body: SafeArea(
+        child: PageView(
+          controller: _pageController,
+          onPageChanged: (i) {
+            setState(() => _index = i);
+            if (i == 0) _homeKey.currentState?.loadData();
+            if (i == 1) _historyKey.currentState?.loadData();
+          },
+          children: [
+            HomeScreen(
+              key: _homeKey,
+              userId: widget.userId,
+              onProfileTap: _openSettingsMenu,
+              onGoToTarget: () => _goToTab(2),
+              onGoToHistory: () => _goToTab(1),
+            ),
+            HistoryScreen(key: _historyKey, userId: widget.userId),
+            TargetScreen(userId: widget.userId),
+          ],
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,

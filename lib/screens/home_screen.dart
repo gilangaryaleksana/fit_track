@@ -40,11 +40,13 @@ double _unit(double v) => math.min(1.0, math.max(0.0, v));
 /// attaches locally without affecting the other tabs.
 class HomeScreen extends StatefulWidget {
   final int userId;
+  final VoidCallback? onProfileTap;
   final VoidCallback? onGoToTarget;
   final VoidCallback? onGoToHistory;
   const HomeScreen({
     super.key,
     required this.userId,
+    this.onProfileTap,
     this.onGoToTarget,
     this.onGoToHistory,
   });
@@ -148,15 +150,26 @@ class HomeScreenState extends State<HomeScreen> {
     final shown = _todayActivities.take(_maxTodayItems).toList();
 
     return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        toolbarHeight: 64,
+        titleSpacing: 16,
+        elevation: 0,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        surfaceTintColor: Colors.transparent,
+        title: _GreetingRow(
+          name: _userName,
+          now: now,
+          onProfileTap: widget.onProfileTap,
+        ),
+      ),
       body: RefreshIndicator(
         onRefresh: loadData,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           // Bottom space so the last item isn't hidden behind the FAB.
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 96),
           children: [
-            _GreetingRow(name: _userName, now: now),
-            const SizedBox(height: 14),
             if (_ongoingSession != null) ...[
               _OngoingSessionBanner(
                 session: _ongoingSession!,
@@ -208,7 +221,12 @@ class HomeScreenState extends State<HomeScreen> {
 class _GreetingRow extends StatelessWidget {
   final String name;
   final DateTime now;
-  const _GreetingRow({required this.name, required this.now});
+  final VoidCallback? onProfileTap;
+  const _GreetingRow({
+    required this.name,
+    required this.now,
+    required this.onProfileTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -217,29 +235,40 @@ class _GreetingRow extends StatelessWidget {
 
     return Row(
       children: [
-        Container(
-          width: 42,
-          height: 42,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [_teal, _tealDark],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: _teal.withValues(alpha: 0.4),
-                blurRadius: 12,
-                offset: const Offset(0, 5),
+        Semantics(
+          button: true,
+          label: 'Buka pengaturan profil',
+          child: Tooltip(
+            message: 'Pengaturan profil',
+            child: InkWell(
+              onTap: onProfileTap,
+              customBorder: const CircleBorder(),
+              child: Container(
+                width: 42,
+                height: 42,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [_teal, _tealDark],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _teal.withValues(alpha: 0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
               ),
-            ],
-          ),
-          child: Text(
-            initial,
-            style: const TextStyle(
-                fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
           ),
         ),
         const SizedBox(width: 11),
