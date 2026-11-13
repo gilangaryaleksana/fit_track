@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart' hide ActivityType;
+import '../utils/unit_formatter.dart';
 
 /// Minimum speed (m/s) to count a tick as "actually moving". Below this,
 /// GPS drift while stationary is ignored so calories stop accruing.
@@ -19,6 +20,10 @@ class TrackingTaskHandler extends TaskHandler {
   int _accumulatedSeconds = 0;
   int _movingSeconds = 0;
   bool _useGps = true;
+  bool _autoPause = false;
+  bool _notificationEnabled = true;
+  bool _distanceMiles = false;
+  LocationAccuracy _accuracy = LocationAccuracy.high;
   String _typeName = 'Aktivitas';
   DateTime? _tickStart;
   DateTime? _lastTickTime;
@@ -36,6 +41,21 @@ class TrackingTaskHandler extends TaskHandler {
         0;
     _useGps =
         (await FlutterForegroundTask.getData<bool>(key: 'usesGps')) ?? true;
+    _autoPause =
+        (await FlutterForegroundTask.getData<bool>(key: 'autoPause')) ?? false;
+    _notificationEnabled = (await FlutterForegroundTask.getData<bool>(
+            key: 'notificationEnabled')) ??
+        true;
+    _distanceMiles =
+        (await FlutterForegroundTask.getData<bool>(key: 'distanceMiles')) ??
+            false;
+    final accuracy =
+        await FlutterForegroundTask.getData<String>(key: 'gpsAccuracy');
+    _accuracy = switch (accuracy) {
+      'batterySaver' => LocationAccuracy.low,
+      'balanced' => LocationAccuracy.medium,
+      _ => LocationAccuracy.high,
+    };
     _typeName = (await FlutterForegroundTask.getData<String>(
             key: 'activityTypeName')) ??
         'Aktivitas';
@@ -50,10 +70,10 @@ class TrackingTaskHandler extends TaskHandler {
           timestamp.difference(_lastTickTime ?? timestamp).inSeconds;
 
       Position? position;
+      var isMoving = !_useGps;
       if (_useGps) {
         position = await Geolocator.getCurrentPosition(
-          locationSettings:
-              const LocationSettings(accuracy: LocationAccuracy.high),
+          locationSettings: LocationSettings(accuracy: _accuracy),
         );
 
         if (_lastPosition != null) {
@@ -70,6 +90,7 @@ class TrackingTaskHandler extends TaskHandler {
           final speed = tickSeconds > 0 ? deltaMeters / tickSeconds : 0;
           if (speed >= _movementThresholdMetersPerSecond) {
             _movingSeconds += tickSeconds;
+            isMoving = true;
           }
         }
         _lastPosition = position;
@@ -79,8 +100,10 @@ class TrackingTaskHandler extends TaskHandler {
       }
       _lastTickTime = timestamp;
 
-      final elapsedSeconds =
-          _accumulatedSeconds + timestamp.difference(_tickStart!).inSeconds;
+      final elapsedSeconds = _autoPause && _useGps
+          ? _accumulatedSeconds + (isMoving ? tickSeconds : 0)
+          : _accumulatedSeconds + timestamp.difference(_tickStart!).inSeconds;
+      if (_autoPause && _useGps) _accumulatedSeconds = elapsedSeconds;
 
       // Persist progress so the UI can restore it even after the app
       // process was killed and reopened while this service keeps running.
@@ -91,12 +114,22 @@ class TrackingTaskHandler extends TaskHandler {
       await FlutterForegroundTask.saveData(
           key: 'accumulatedMovingSeconds', value: _movingSeconds);
 
+      _notificationEnabled = await FlutterForegroundTask.getData<bool>(
+              key: 'notificationEnabled') ??
+          _notificationEnabled;
+      _distanceMiles =
+          await FlutterForegroundTask.getData<bool>(key: 'distanceMiles') ??
+              _distanceMiles;
       final durationText = _formatDuration(elapsedSeconds);
       FlutterForegroundTask.updateService(
-        notificationTitle: 'FitTrack \u2014 $_typeName berlangsung',
-        notificationText: _useGps
-            ? '$durationText \u2022 ${(_distanceMeters / 1000).toStringAsFixed(2)} km'
-            : durationText,
+        notificationTitle: _notificationEnabled
+            ? 'FitTrack \u2014 $_typeName berlangsung'
+            : 'FitTrack',
+        notificationText: _notificationEnabled
+            ? _useGps
+                ? '$durationText \u2022 ${UnitFormatter.formatDistanceWithUnit(_distanceMeters, useMiles: _distanceMiles)}'
+                : durationText
+            : 'Sesi olahraga sedang berlangsung',
       );
 
       FlutterForegroundTask.sendDataToMain({

@@ -2,12 +2,23 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../db/database_helper.dart';
 import '../models/models.dart';
+import '../services/notification_service.dart';
 import '../theme/app_colors.dart';
 
 const _weekdays = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
 const _months = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-  'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'Mei',
+  'Jun',
+  'Jul',
+  'Agu',
+  'Sep',
+  'Okt',
+  'Nov',
+  'Des',
 ];
 
 const _teal = Color(0xFF2EC4B6);
@@ -62,7 +73,8 @@ class _DayStat {
     required this.target,
   });
 
-  double _ratio(num value, num goal) => goal <= 0 ? 1.0 : (value / goal).toDouble();
+  double _ratio(num value, num goal) =>
+      goal <= 0 ? 1.0 : (value / goal).toDouble();
 
   /// Both goals count: the day is only done once calories AND duration are.
   bool get met =>
@@ -113,11 +125,14 @@ class _TargetScreenState extends State<TargetScreen> {
   Future<void> _loadData() async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final windowStart = DateTime(today.year, today.month, today.day - (_windowDays - 1));
+    final windowStart =
+        DateTime(today.year, today.month, today.day - (_windowDays - 1));
     final tomorrow = DateTime(today.year, today.month, today.day + 1);
 
-    final activities = await _db.getActivitiesInRange(widget.userId, windowStart, tomorrow);
-    final targets = await _db.getTargetsInRange(widget.userId, windowStart, tomorrow);
+    final activities =
+        await _db.getActivitiesInRange(widget.userId, windowStart, tomorrow);
+    final targets =
+        await _db.getTargetsInRange(widget.userId, windowStart, tomorrow);
     final latest = await _db.getLatestTarget(widget.userId);
 
     final totals = <DateTime, _Totals>{};
@@ -136,7 +151,8 @@ class _TargetScreenState extends State<TargetScreen> {
     final days = <_DayStat>[
       for (var i = 0; i < _windowDays; i++)
         () {
-          final day = DateTime(windowStart.year, windowStart.month, windowStart.day + i);
+          final day = DateTime(
+              windowStart.year, windowStart.month, windowStart.day + i);
           return _DayStat(
             day: day,
             kcal: totals[day]?.kcal ?? 0,
@@ -180,6 +196,8 @@ class _TargetScreenState extends State<TargetScreen> {
       targetDurationMinutes: _formMinutes,
       date: DateTime.now(),
     ));
+
+    await NotificationService.instance.checkGoalAchievement(widget.userId);
 
     if (!mounted) return;
     setState(() => _saving = false);
@@ -274,8 +292,7 @@ class _TargetScreenState extends State<TargetScreen> {
         children: [
           _ProgressCard(
             today: today,
-            dateLabel:
-                '${_weekdays[now.weekday - 1]}, ${_dayMonth(now)}',
+            dateLabel: '${_weekdays[now.weekday - 1]}, ${_dayMonth(now)}',
           ),
           const SizedBox(height: 12),
           _WeekCard(week: _week, streak: _streak),
@@ -288,7 +305,8 @@ class _TargetScreenState extends State<TargetScreen> {
             prefillNote: _prefillFrom != null
                 ? 'Diisi dari target terakhir (${_dayMonth(_prefillFrom!)})'
                 : null,
-            dateNote: 'Berlaku untuk hari ini \u00b7 ${_dayMonth(now)} ${now.year}',
+            dateNote:
+                'Berlaku untuk hari ini \u00b7 ${_dayMonth(now)} ${now.year}',
             onPreset: (p) => setState(() {
               _formKcal = p.kcal;
               _formMinutes = p.minutes;
@@ -368,7 +386,9 @@ class _ProgressCard extends StatelessWidget {
             children: [
               const Text('Progres hari ini',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-              Text(dateLabel, style: TextStyle(fontSize: 11, color: context.colors.inkSoft)),
+              Text(dateLabel,
+                  style:
+                      TextStyle(fontSize: 11, color: context.colors.inkSoft)),
             ],
           ),
           const SizedBox(height: 12),
@@ -432,7 +452,8 @@ class _NoTargetBody extends StatelessWidget {
                   _teal.withValues(alpha: 0.05),
                 ]),
               ),
-              child: const Icon(Icons.flag_outlined, size: 28, color: _tealDark),
+              child:
+                  const Icon(Icons.flag_outlined, size: 28, color: _tealDark),
             ),
             const SizedBox(height: 10),
             const Text('Belum ada target hari ini',
@@ -441,7 +462,8 @@ class _NoTargetBody extends StatelessWidget {
             Text(
               'Tentuin dulu berapa kalori dan durasi yang mau kamu kejar hari ini.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11.5, height: 1.5, color: context.colors.inkSoft),
+              style: TextStyle(
+                  fontSize: 11.5, height: 1.5, color: context.colors.inkSoft),
             ),
           ],
         ),
@@ -491,11 +513,13 @@ class _RingItem extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(valueText,
-                      style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+                      style: const TextStyle(
+                          fontSize: 19, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 3),
                   Text(
                     done ? '$goalText \u2713' : goalText,
-                    style: TextStyle(fontSize: 9.5, color: context.colors.inkSoft),
+                    style:
+                        TextStyle(fontSize: 9.5, color: context.colors.inkSoft),
                   ),
                 ],
               ),
@@ -510,7 +534,9 @@ class _RingItem extends StatelessWidget {
             const SizedBox(width: 4),
             Text(label,
                 style: TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w600, color: context.colors.inkSoft)),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.inkSoft)),
           ],
         ),
       ],
@@ -571,7 +597,8 @@ class _StatusBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: achieved ? null : context.colors.tealTint,
         gradient: achieved
-            ? const LinearGradient(colors: [Color(0xFF2FBF8A), Color(0xFF1E9E6E)])
+            ? const LinearGradient(
+                colors: [Color(0xFF2FBF8A), Color(0xFF1E9E6E)])
             : null,
         borderRadius: BorderRadius.circular(12),
         boxShadow: achieved
@@ -621,7 +648,8 @@ class _WeekCard extends StatelessWidget {
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
               if (streak > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                   decoration: BoxDecoration(
                     color: context.colors.streakBg,
                     borderRadius: BorderRadius.circular(20),
@@ -657,7 +685,9 @@ class _WeekCard extends StatelessWidget {
                   right: 0,
                   child: SizedBox(
                     height: 1.5,
-                    child: CustomPaint(painter: _DashedLinePainter(color: context.colors.lineStrong)),
+                    child: CustomPaint(
+                        painter: _DashedLinePainter(
+                            color: context.colors.lineStrong)),
                   ),
                 ),
                 Positioned.fill(
@@ -668,7 +698,8 @@ class _WeekCard extends StatelessWidget {
                       for (var i = 0; i < week.length; i++)
                         Expanded(
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 3.5),
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 3.5),
                             child: _WeekBar(
                               stat: week[i],
                               isToday: i == week.length - 1,
@@ -691,9 +722,12 @@ class _WeekCard extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 9.5,
-                      color: i == week.length - 1 ? context.colors.ink : context.colors.inkSoft,
-                      fontWeight:
-                          i == week.length - 1 ? FontWeight.w800 : FontWeight.normal,
+                      color: i == week.length - 1
+                          ? context.colors.ink
+                          : context.colors.inkSoft,
+                      fontWeight: i == week.length - 1
+                          ? FontWeight.w800
+                          : FontWeight.normal,
                     ),
                   ),
                 ),
@@ -771,7 +805,8 @@ class _DashedLinePainter extends CustomPainter {
     const dash = 5.0;
     const gap = 4.0;
     for (var x = 0.0; x < size.width; x += dash + gap) {
-      canvas.drawLine(Offset(x, 0), Offset(math.min(x + dash, size.width), 0), paint);
+      canvas.drawLine(
+          Offset(x, 0), Offset(math.min(x + dash, size.width), 0), paint);
     }
   }
 
@@ -831,7 +866,8 @@ class _FormCard extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.lightbulb_outline, size: 14, color: context.colors.amberText),
+                  Icon(Icons.lightbulb_outline,
+                      size: 14, color: context.colors.amberText),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -855,7 +891,8 @@ class _FormCard extends StatelessWidget {
                 Expanded(
                   child: _PresetCard(
                     preset: _presets[i],
-                    selected: _presets[i].kcal == kcal && _presets[i].minutes == minutes,
+                    selected: _presets[i].kcal == kcal &&
+                        _presets[i].minutes == minutes,
                     onTap: () => onPreset(_presets[i]),
                   ),
                 ),
@@ -901,14 +938,18 @@ class _FormCard extends StatelessWidget {
                   ? const SizedBox(
                       height: 20,
                       width: 20,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2),
                     )
-                  : Text(hasTarget ? 'Simpan Target' : 'Simpan Target Hari Ini'),
+                  : Text(
+                      hasTarget ? 'Simpan Target' : 'Simpan Target Hari Ini'),
             ),
           ),
           const SizedBox(height: 10),
           Center(
-            child: Text(dateNote, style: TextStyle(fontSize: 10.5, color: context.colors.inkSoft)),
+            child: Text(dateNote,
+                style:
+                    TextStyle(fontSize: 10.5, color: context.colors.inkSoft)),
           ),
         ],
       ),
@@ -920,7 +961,8 @@ class _PresetCard extends StatelessWidget {
   final _Preset preset;
   final bool selected;
   final VoidCallback onTap;
-  const _PresetCard({required this.preset, required this.selected, required this.onTap});
+  const _PresetCard(
+      {required this.preset, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -942,12 +984,14 @@ class _PresetCard extends StatelessWidget {
           child: Column(
             children: [
               Text(preset.name,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.bold)),
               const SizedBox(height: 3),
               Text(
                 '${preset.kcal} kcal\n${preset.minutes} menit',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 10, height: 1.45, color: context.colors.inkSoft),
+                style: TextStyle(
+                    fontSize: 10, height: 1.45, color: context.colors.inkSoft),
               ),
             ],
           ),
@@ -994,7 +1038,8 @@ class _StepperRow extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Text(label,
-              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+              style:
+                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
         ),
         _StepButton(icon: Icons.remove, onTap: canDecrease ? onDecrease : null),
         InkWell(
@@ -1007,12 +1052,15 @@ class _StepperRow extends StatelessWidget {
             child: Text.rich(
               TextSpan(
                 text: '$value ',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                 children: [
                   TextSpan(
                     text: unit,
                     style: TextStyle(
-                        fontSize: 10, fontWeight: FontWeight.w500, color: context.colors.inkSoft),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: context.colors.inkSoft),
                   ),
                 ],
               ),

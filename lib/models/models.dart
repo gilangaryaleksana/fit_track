@@ -4,6 +4,10 @@ class AppUser {
   final String email;
   final double heightCm;
   final double weightKg;
+  final String? birthDate;
+  final String? gender;
+  final String? avatarInitials;
+  final String? avatarPath;
 
   AppUser({
     this.id,
@@ -11,6 +15,10 @@ class AppUser {
     required this.email,
     required this.heightCm,
     required this.weightKg,
+    this.birthDate,
+    this.gender,
+    this.avatarInitials,
+    this.avatarPath,
   });
 
   Map<String, dynamic> toMap() => {
@@ -19,6 +27,10 @@ class AppUser {
         'email': email,
         'height_cm': heightCm,
         'weight_kg': weightKg,
+        'birth_date': birthDate,
+        'gender': gender,
+        'avatar_initials': avatarInitials,
+        'avatar_path': avatarPath,
       };
 
   factory AppUser.fromMap(Map<String, dynamic> map) => AppUser(
@@ -27,6 +39,10 @@ class AppUser {
         email: map['email'] as String,
         heightCm: (map['height_cm'] as num).toDouble(),
         weightKg: (map['weight_kg'] as num).toDouble(),
+        birthDate: map['birth_date'] as String?,
+        gender: map['gender'] as String?,
+        avatarInitials: map['avatar_initials'] as String?,
+        avatarPath: map['avatar_path'] as String?,
       );
 }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../db/database_helper.dart';
 import '../models/models.dart';
 import '../services/sync_service.dart';
+import '../services/notification_service.dart';
 import '../utils/activity_style.dart';
 import '../theme/app_colors.dart';
 
@@ -66,6 +67,7 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
     );
 
     final localId = await _db.insertActivity(activity);
+    await NotificationService.instance.checkGoalAchievement(widget.userId);
 
     // Fire-and-forget: app must keep working fully offline, so this never
     // blocks navigation or shows an error if there's no connection.
@@ -144,10 +146,12 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
                         decoration:
                             const InputDecoration(hintText: 'contoh: 30'),
                         validator: (value) {
-                          if (value == null || value.isEmpty)
+                          if (value == null || value.isEmpty) {
                             return 'Wajib diisi';
-                          if (int.tryParse(value) == null)
+                          }
+                          if (int.tryParse(value) == null) {
                             return 'Harus berupa angka';
+                          }
                           return null;
                         },
                       ),

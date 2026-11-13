@@ -27,12 +27,25 @@ class ThemeController with WidgetsBindingObserver {
   Timer? _settleTimer;
   double? _lastLux;
   bool _started = false;
+  bool _manualOverride = false;
 
   void start() {
     if (_started) return;
     _started = true;
     WidgetsBinding.instance.addObserver(this);
     _listen();
+  }
+
+  void setManualMode(ThemeMode? manualMode) {
+    if (manualMode != null) {
+      _manualOverride = true;
+      _stopListening();
+      mode.value = manualMode;
+    } else {
+      _manualOverride = false;
+      mode.value = ThemeMode.system;
+      _listen();
+    }
   }
 
   void dispose() {
@@ -115,7 +128,9 @@ class ThemeController with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
       _stopListening();
-    } else if (state == AppLifecycleState.resumed && _subscription == null) {
+    } else if (state == AppLifecycleState.resumed &&
+        _subscription == null &&
+        !_manualOverride) {
       _listen();
     }
   }

@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'db/database_helper.dart';
 import 'screens/auth_screen.dart';
 import 'screens/main_navigation_screen.dart';
+import 'services/notification_service.dart';
+import 'services/settings_service.dart';
 import 'services/api_client.dart';
 import 'services/pull_sync_service.dart';
 import 'theme/app_theme.dart';
@@ -13,10 +15,18 @@ import 'theme/theme_controller.dart';
 /// Light/dark is driven by the phone's ambient light sensor.
 final themeController = ThemeController();
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   FlutterForegroundTask.initCommunicationPort();
+  await SettingsService.instance.initialize();
+  await NotificationService.instance.initialize();
   themeController.start();
+  final themePreference = SettingsService.instance.themePreference;
+  themeController.setManualMode(switch (themePreference) {
+    ThemePreference.automatic => null,
+    ThemePreference.light => ThemeMode.light,
+    ThemePreference.dark => ThemeMode.dark,
+  });
   runApp(const HealthTrackerApp());
 }
 
@@ -25,22 +35,25 @@ class HealthTrackerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: themeController.mode,
-      builder: (context, mode, _) => MaterialApp(
-        title: 'Tracking Kesehatan',
-        theme: buildAppTheme(Brightness.light),
-        darkTheme: buildAppTheme(Brightness.dark),
-        themeMode: mode,
-        // Screens without an AppBar (login, live tracking) wouldn't update the
-        // status bar icons on their own, so they'd vanish on a dark background.
-        builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
-          value: Theme.of(context).brightness == Brightness.dark
-              ? SystemUiOverlayStyle.light
-              : SystemUiOverlayStyle.dark,
-          child: child!,
+    return AnimatedBuilder(
+      animation: SettingsService.instance,
+      builder: (context, _) => ValueListenableBuilder<ThemeMode>(
+        valueListenable: themeController.mode,
+        builder: (context, mode, _) => MaterialApp(
+          title: 'Tracking Kesehatan',
+          theme: buildAppTheme(Brightness.light),
+          darkTheme: buildAppTheme(Brightness.dark),
+          themeMode: mode,
+          // Screens without an AppBar (login, live tracking) wouldn't update the
+          // status bar icons on their own, so they'd vanish on a dark background.
+          builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+            value: Theme.of(context).brightness == Brightness.dark
+                ? SystemUiOverlayStyle.light
+                : SystemUiOverlayStyle.dark,
+            child: child!,
+          ),
+          home: const StartupScreen(),
         ),
-        home: const StartupScreen(),
       ),
     );
   }

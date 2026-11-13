@@ -266,6 +266,7 @@ class _SummaryCard extends StatelessWidget {
 
     return Container(
       width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 210),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -284,6 +285,7 @@ class _SummaryCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,

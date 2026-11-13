@@ -17,7 +17,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'health_tracker.db');
     return openDatabase(
       path,
-      version: 3,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -29,6 +29,33 @@ class DatabaseHelper {
     }
     if (oldVersion < 3) {
       await _addServerIdColumn(db);
+    }
+    if (oldVersion < 4) {
+      await _addProfileColumns(db);
+    }
+    if (oldVersion < 5) {
+      await _addAvatarPathColumn(db);
+    }
+  }
+
+  Future<void> _addAvatarPathColumn(Database db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(users)');
+    if (!columns.any((column) => column['name'] == 'avatar_path')) {
+      await db.execute('ALTER TABLE users ADD COLUMN avatar_path TEXT');
+    }
+  }
+
+  Future<void> _addProfileColumns(Database db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(users)');
+    final names = columns.map((column) => column['name']).toSet();
+    if (!names.contains('birth_date')) {
+      await db.execute('ALTER TABLE users ADD COLUMN birth_date TEXT');
+    }
+    if (!names.contains('gender')) {
+      await db.execute('ALTER TABLE users ADD COLUMN gender TEXT');
+    }
+    if (!names.contains('avatar_initials')) {
+      await db.execute('ALTER TABLE users ADD COLUMN avatar_initials TEXT');
     }
   }
 
@@ -62,7 +89,11 @@ class DatabaseHelper {
         name TEXT NOT NULL,
         email TEXT NOT NULL UNIQUE,
         height_cm REAL NOT NULL,
-        weight_kg REAL NOT NULL
+        weight_kg REAL NOT NULL,
+        birth_date TEXT,
+        gender TEXT,
+        avatar_initials TEXT,
+        avatar_path TEXT
       )
     ''');
 
@@ -129,6 +160,28 @@ class DatabaseHelper {
     final result = await db.query('users', where: 'id = ?', whereArgs: [id]);
     if (result.isEmpty) return null;
     return AppUser.fromMap(result.first);
+  }
+
+  Future<double?> getUserWeightKg(int id) async {
+    final db = await database;
+    final result = await db.query(
+      'users',
+      columns: ['weight_kg'],
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (result.isEmpty) return null;
+    return (result.first['weight_kg'] as num).toDouble();
+  }
+
+  Future<int> updateUser(AppUser user) async {
+    final db = await database;
+    return db.update(
+      'users',
+      user.toMap()..remove('id'),
+      where: 'id = ?',
+      whereArgs: [user.id],
+    );
   }
 
   Future<AppUser?> getUserByEmail(String email) async {
@@ -246,6 +299,21 @@ class DatabaseHelper {
     final db = await database;
     await db.delete('route_points', where: 'activity_id = ?', whereArgs: [id]);
     return db.delete('activities', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> deleteUserData(int userId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.rawDelete(
+        'DELETE FROM route_points WHERE activity_id IN '
+        '(SELECT id FROM activities WHERE user_id = ?)',
+        [userId],
+      );
+      await txn.delete('activities', where: 'user_id = ?', whereArgs: [userId]);
+      await txn
+          .delete('daily_targets', where: 'user_id = ?', whereArgs: [userId]);
+      await txn.delete('users', where: 'id = ?', whereArgs: [userId]);
+    });
   }
 
   Future<int?> getActivityServerId(int id) async {

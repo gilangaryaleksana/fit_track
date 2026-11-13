@@ -5,8 +5,8 @@ import '../services/api_client.dart';
 import 'auth_screen.dart';
 import 'history_screen.dart';
 import 'home_screen.dart';
+import 'profile/profile_screen.dart';
 import 'target_screen.dart';
-import '../theme/app_colors.dart';
 
 /// Owns the bottom NavigationBar across all three tabs. Switching tabs slides
 /// the PageView instead of pushing a whole new route.
@@ -69,36 +69,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  Future<void> _openSettingsMenu() async {
-    final shouldLogout = await showModalBottomSheet<bool>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Pengaturan',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.logout, color: context.colors.inkSoft),
-                title: const Text('Keluar dari akun'),
-                onTap: () => Navigator.pop(context, true),
-              ),
-            ],
-          ),
-        ),
+  Future<void> _openProfile() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProfileScreen(userId: widget.userId, onLogout: _logout),
       ),
     );
-    if (shouldLogout == true && mounted) await _logout();
+    if (!mounted) return;
+    _homeKey.currentState?.loadData();
+    _historyKey.currentState?.loadData();
   }
 
   @override
@@ -116,7 +96,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             HomeScreen(
               key: _homeKey,
               userId: widget.userId,
-              onProfileTap: _openSettingsMenu,
+              onProfileTap: _openProfile,
               onGoToTarget: () => _goToTab(2),
               onGoToHistory: () => _goToTab(1),
             ),

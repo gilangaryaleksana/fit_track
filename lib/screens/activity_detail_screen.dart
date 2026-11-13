@@ -7,6 +7,8 @@ import '../db/database_helper.dart';
 import '../models/models.dart';
 import '../services/sync_service.dart';
 import '../utils/activity_style.dart';
+import '../utils/unit_formatter.dart';
+import '../services/settings_service.dart';
 import '../theme/app_colors.dart';
 
 const _cartoKey = 'cb1_3xnq_1_d5f34b66a55d20c44f8bb363';
@@ -33,11 +35,17 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   @override
   void initState() {
     super.initState();
+    SettingsService.instance.addListener(_settingsChanged);
     _load();
+  }
+
+  void _settingsChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    SettingsService.instance.removeListener(_settingsChanged);
     _mapController.dispose();
     super.dispose();
   }
@@ -95,12 +103,10 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   }
 
   String get _paceLabel {
-    final km = _distanceMeters / 1000;
-    if (km < 0.02) return "\u2013'\u2013\u2013\"";
-    final paceMinutes = widget.activity.durationMinutes / km;
-    final minutes = paceMinutes.floor();
-    final seconds = ((paceMinutes - minutes) * 60).round();
-    return "$minutes'${seconds.toString().padLeft(2, '0')}\"";
+    return UnitFormatter.formatPace(
+      distanceMeters: _distanceMeters,
+      elapsed: Duration(minutes: widget.activity.durationMinutes),
+    );
   }
 
   Future<void> _delete() async {
@@ -371,13 +377,12 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                         _StatTile(
                           icon: Icons.location_on_outlined,
                           label: 'Jarak',
-                          value:
-                              '${(_distanceMeters / 1000).toStringAsFixed(2)} km',
+                          value: UnitFormatter.formatDistance(_distanceMeters),
                         ),
                         _StatTile(
                           icon: Icons.bolt_outlined,
                           label: 'Pace',
-                          value: '$_paceLabel /km',
+                          value: '$_paceLabel ${UnitFormatter.paceUnitLabel}',
                         ),
                       ],
                       _StatTile(

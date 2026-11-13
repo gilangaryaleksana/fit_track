@@ -1,7 +1,9 @@
 import 'package:geolocator/geolocator.dart' hide ActivityType;
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../db/database_helper.dart';
 import '../models/models.dart';
 import 'api_client.dart';
+import 'settings_service.dart';
 
 /// Pushes a finished activity to the Laravel backend after it's already
 /// saved locally. This is fire-and-forget: the app must keep working fully
@@ -13,6 +15,15 @@ class SyncService {
 
   List<dynamic>? _serverActivityTypesCache;
   final Set<int> _syncingActivityIds = {};
+
+  Future<bool> _syncAllowed() async {
+    await SettingsService.instance.initialize();
+    if (!SettingsService.instance.wifiOnlySync) return true;
+    final connectivity = await Connectivity().checkConnectivity();
+    return connectivity.contains(ConnectivityResult.wifi);
+  }
+
+  Future<bool> get canSyncNow => _syncAllowed();
 
   Future<int?> _serverActivityTypeId(String name) async {
     try {
@@ -34,6 +45,7 @@ class SyncService {
 
   Future<bool> syncPendingActivities(int userId) async {
     if (!await ApiClient.instance.isLoggedIn) return false;
+    if (!await _syncAllowed()) return false;
 
     final db = DatabaseHelper.instance;
     final types = await db.getActivityTypes();
@@ -94,6 +106,7 @@ class SyncService {
     try {
       final loggedIn = await ApiClient.instance.isLoggedIn;
       if (!loggedIn) return false;
+      if (!await _syncAllowed()) return false;
 
       final typeId = await _serverActivityTypeId(activityTypeName);
       if (typeId == null) return false;

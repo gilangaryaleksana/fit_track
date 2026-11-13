@@ -1,6 +1,7 @@
 import '../db/database_helper.dart';
 import '../models/models.dart';
 import 'api_client.dart';
+import 'sync_service.dart';
 
 /// Restores activity history from the backend into local SQLite — the
 /// counterpart to [SyncService], which only ever pushes. Runs after
@@ -13,10 +14,11 @@ class PullSyncService {
 
   final _db = DatabaseHelper.instance;
 
-  Future<void> pullActivities(int localUserId) async {
+  Future<bool> pullActivities(int localUserId) async {
     try {
       final loggedIn = await ApiClient.instance.isLoggedIn;
-      if (!loggedIn) return;
+      if (!loggedIn) return false;
+      if (!await SyncService.instance.canSyncNow) return false;
 
       final localTypes = await _db.getActivityTypes();
       final typeIdByName = {
@@ -25,7 +27,8 @@ class PullSyncService {
 
       var page = 1;
       while (true) {
-        final res = await ApiClient.instance.get('activities?per_page=50&page=$page');
+        final res =
+            await ApiClient.instance.get('activities?per_page=50&page=$page');
         final items = (res['data'] as List).cast<Map<String, dynamic>>();
 
         for (final item in items) {
@@ -37,9 +40,11 @@ class PullSyncService {
         if (currentPage >= lastPage) break;
         page++;
       }
+      return true;
     } catch (_) {
       // Best-effort: offline, not logged in yet, or nothing to restore.
       // Local SQLite is unaffected either way.
+      return false;
     }
   }
 
@@ -53,8 +58,7 @@ class PullSyncService {
     final alreadySynced = await _db.getLocalIdByServerId(serverId);
     if (alreadySynced != null) return;
 
-    final typeName =
-        (item['activity_type']?['name'] as String?)?.toLowerCase();
+    final typeName = (item['activity_type']?['name'] as String?)?.toLowerCase();
     final localTypeId = typeName != null ? typeIdByName[typeName] : null;
     if (localTypeId == null) return;
 
@@ -95,7 +99,8 @@ class PullSyncService {
       durationMinutes: (movingSeconds / 60).round().clamp(1, 999999),
       caloriesBurned: (item['calories'] as num?)?.toDouble() ?? 0,
       date: startedAt,
-      note: (description != null && description.isNotEmpty) ? description : null,
+      note:
+          (description != null && description.isNotEmpty) ? description : null,
     );
 
     final localId = await _db.insertActivityFromServer(activity, serverId);

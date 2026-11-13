@@ -26,6 +26,16 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>FitTrack menggunakan lokasi untuk merekam jarak dan rute olahraga.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>FitTrack menggunakan lokasi di latar belakang agar sesi olahraga tetap terekam.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>FitTrack menggunakan lokasi di latar belakang agar sesi olahraga tetap terekam.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>FitTrack menggunakan aktivitas fisik untuk menampilkan status izin dan mendukung tracking.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>FitTrack menggunakan foto yang kamu pilih sebagai avatar profil.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

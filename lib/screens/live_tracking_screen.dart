@@ -11,7 +11,10 @@ import '../db/database_helper.dart';
 import '../models/models.dart';
 import '../services/sync_service.dart';
 import '../services/tracking_task_handler.dart';
+import '../services/settings_service.dart';
+import '../services/notification_service.dart';
 import '../utils/activity_style.dart';
+import '../utils/unit_formatter.dart';
 import '../widgets/step_indicator.dart';
 import '../theme/app_colors.dart';
 
@@ -60,6 +63,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   double _totalDistanceMeters = 0;
   int _movingSeconds = 0;
   String? _locationError;
+  bool _autoPauseSession = false;
 
   bool get _usesMap => _selectedType == null
       ? true
@@ -68,6 +72,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   bool get _hasProgress => _elapsed > Duration.zero || _isRunning;
 
   Duration get _displayElapsed {
+    if (_autoPauseSession) return _elapsed;
     if (!_isRunning || _displayBaseAt == null) return _elapsed;
     return _displayBaseElapsed + DateTime.now().difference(_displayBaseAt!);
   }
@@ -94,8 +99,14 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   @override
   void initState() {
     super.initState();
+    _autoPauseSession = SettingsService.instance.autoPause;
+    SettingsService.instance.addListener(_settingsChanged);
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
     _init();
+  }
+
+  void _settingsChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _init() async {
@@ -124,20 +135,26 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
 
   Future<void> _resumeIfServiceRunning(List<ActivityType> types) async {
     final sessionActive =
-        await FlutterForegroundTask.getData<bool>(key: 'sessionActive') ?? false;
+        await FlutterForegroundTask.getData<bool>(key: 'sessionActive') ??
+            false;
     if (!sessionActive) return;
 
     final isRunning = await FlutterForegroundTask.isRunningService;
-    final typeId = await FlutterForegroundTask.getData<int>(key: 'activityTypeId');
+    final typeId =
+        await FlutterForegroundTask.getData<int>(key: 'activityTypeId');
     final seconds =
-        await FlutterForegroundTask.getData<int>(key: 'accumulatedSeconds') ?? 0;
-    final distance =
-        await FlutterForegroundTask.getData<double>(key: 'accumulatedDistance') ?? 0;
+        await FlutterForegroundTask.getData<int>(key: 'accumulatedSeconds') ??
+            0;
+    final distance = await FlutterForegroundTask.getData<double>(
+            key: 'accumulatedDistance') ??
+        0;
     final movingSeconds = await FlutterForegroundTask.getData<int>(
             key: 'accumulatedMovingSeconds') ??
         0;
     final startedAtRaw =
         await FlutterForegroundTask.getData<String>(key: 'sessionStartedAt');
+    final autoPause =
+        await FlutterForegroundTask.getData<bool>(key: 'autoPause') ?? false;
 
     ActivityType? matchedType;
     for (final t in types) {
@@ -153,7 +170,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       _elapsed = Duration(seconds: seconds);
       _totalDistanceMeters = distance;
       _movingSeconds = movingSeconds;
-      _startedAt = startedAtRaw != null ? DateTime.tryParse(startedAtRaw) : null;
+      _autoPauseSession = autoPause;
+      _startedAt =
+          startedAtRaw != null ? DateTime.tryParse(startedAtRaw) : null;
       _isRunning = isRunning;
     });
     if (isRunning) _startUiTicker();
@@ -240,13 +259,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   }
 
   String get _paceLabel {
-    final km = _totalDistanceMeters / 1000;
-    final seconds = _displayElapsed.inSeconds;
-    if (km < 0.02 || seconds < 5) return "\u2013'\u2013\u2013\"";
-    final paceMinutes = (seconds / 60) / km;
-    final minutes = paceMinutes.floor();
-    final secs = ((paceMinutes - minutes) * 60).round();
-    return "$minutes'${secs.toString().padLeft(2, '0')}\"";
+    return '${UnitFormatter.formatPace(
+      distanceMeters: _totalDistanceMeters,
+      elapsed: _displayElapsed,
+    )} ${UnitFormatter.paceUnitLabel}';
   }
 
   Future<void> _initForegroundTaskOptions() async {
@@ -254,7 +270,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'fittrack_tracking',
         channelName: 'Tracking Aktivitas',
-        channelDescription: 'Menampilkan status aktivitas yang sedang berlangsung',
+        channelDescription:
+            'Menampilkan status aktivitas yang sedang berlangsung',
         onlyAlertOnce: true,
       ),
       iosNotificationOptions: const IOSNotificationOptions(),
@@ -268,7 +285,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   }
 
   Future<bool> _ensurePermissions() async {
-    final notifPermission = await FlutterForegroundTask.checkNotificationPermission();
+    final notifPermission =
+        await FlutterForegroundTask.checkNotificationPermission();
     if (notifPermission != NotificationPermission.granted) {
       await FlutterForegroundTask.requestNotificationPermission();
     }
@@ -293,10 +311,22 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     if (_selectedType == null) return;
     final granted = await _ensurePermissions();
     if (!granted) return;
+    if (!mounted) return;
+    final countdown = SettingsService.instance.countdownSeconds;
+    if (countdown > 0) {
+      final shouldStart = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _CountdownDialog(seconds: countdown),
+      );
+      if (shouldStart != true) return;
+    }
 
     await _initForegroundTaskOptions();
 
     _startedAt ??= DateTime.now();
+    final settings = SettingsService.instance;
+    _autoPauseSession = settings.autoPause;
 
     await FlutterForegroundTask.saveData(
         key: 'accumulatedSeconds', value: _elapsed.inSeconds);
@@ -310,12 +340,34 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
         key: 'activityTypeName', value: _selectedType!.name);
     await FlutterForegroundTask.saveData(key: 'usesGps', value: _usesMap);
     await FlutterForegroundTask.saveData(
+      key: 'autoPause',
+      value: settings.autoPause,
+    );
+    await FlutterForegroundTask.saveData(
+      key: 'notificationEnabled',
+      value: settings.ongoingNotificationEnabled,
+    );
+    await FlutterForegroundTask.saveData(
+      key: 'distanceMiles',
+      value: settings.distanceUnit == DistanceUnit.mile,
+    );
+    await FlutterForegroundTask.saveData(
+      key: 'gpsAccuracy',
+      value: settings.gpsAccuracy.name,
+    );
+    await FlutterForegroundTask.saveData(
         key: 'sessionStartedAt', value: _startedAt!.toIso8601String());
     await FlutterForegroundTask.saveData(key: 'sessionActive', value: true);
 
     await FlutterForegroundTask.startService(
-      notificationTitle: 'FitTrack \u2014 ${_selectedType!.name} berlangsung',
-      notificationText: _usesMap ? 'Menyiapkan GPS...' : 'Timer berjalan',
+      notificationTitle: settings.ongoingNotificationEnabled
+          ? 'FitTrack \u2014 ${_selectedType!.name} berlangsung'
+          : 'FitTrack',
+      notificationText: settings.ongoingNotificationEnabled
+          ? _usesMap
+              ? 'Menyiapkan GPS...'
+              : 'Timer berjalan'
+          : 'Sesi olahraga sedang berlangsung',
       callback: startTrackingCallback,
     );
 
@@ -352,6 +404,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     if (_routePoints.isNotEmpty) {
       await _db.insertRoutePoints(activityId, _routePoints);
     }
+    await NotificationService.instance.checkGoalAchievement(widget.userId);
 
     // Fire-and-forget: app must keep working fully offline, so this never
     // blocks navigation or shows an error if there's no connection.
@@ -382,6 +435,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
 
   @override
   void dispose() {
+    SettingsService.instance.removeListener(_settingsChanged);
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     _uiTicker?.cancel();
     _noteController.dispose();
@@ -511,7 +565,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
             child: Text(
               _locationError!,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.w600),
             ),
           ),
       ],
@@ -524,7 +579,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     final elapsed = _displayElapsed;
     final progress = started ? (elapsed.inSeconds % 60) / 60 : 0.0;
     final rate = _selectedType?.caloriesPerMinute ?? 0;
-    final rateText = rate % 1 == 0 ? rate.toStringAsFixed(0) : rate.toStringAsFixed(1);
+    final rateText =
+        rate % 1 == 0 ? rate.toStringAsFixed(0) : rate.toStringAsFixed(1);
 
     final Color? dotColor = _isRunning
         ? const Color(0xFF4ADE80)
@@ -554,7 +610,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   children: [
                     CustomPaint(
                       size: const Size(220, 220),
-                      painter: _RingPainter(progress: progress, color: style.color),
+                      painter:
+                          _RingPainter(progress: progress, color: style.color),
                     ),
                     Column(
                       mainAxisSize: MainAxisSize.min,
@@ -573,7 +630,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                             ],
                             Text('Durasi',
                                 style: TextStyle(
-                                    fontSize: 11.5, color: context.colors.inkSoft)),
+                                    fontSize: 11.5,
+                                    color: context.colors.inkSoft)),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -633,12 +691,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
       decoration: BoxDecoration(
         color: context.colors.surface,
-        borderRadius: const BorderRadius.vertical(top: const Radius.circular(24)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: const [
           BoxShadow(
-            color: const Color(0x14142020),
+            color: Color(0x14142020),
             blurRadius: 24,
-            offset: const Offset(0, -10),
+            offset: Offset(0, -10),
           ),
         ],
       ),
@@ -649,7 +707,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
           if (_usesMap) ...[
             Row(
               children: [
-                _Stat(label: '\u23f1 Durasi', value: _formatDuration(_displayElapsed)),
+                _Stat(
+                    label: '\u23f1 Durasi',
+                    value: _formatDuration(_displayElapsed)),
                 const _StatDivider(),
                 _Stat(label: '\u26a1 Pace', value: _paceLabel),
                 const _StatDivider(),
@@ -742,7 +802,8 @@ class _TopBar extends StatelessWidget {
   final String title;
   final ActivityStyle style;
   final VoidCallback onBack;
-  const _TopBar({required this.title, required this.style, required this.onBack});
+  const _TopBar(
+      {required this.title, required this.style, required this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -766,7 +827,8 @@ class _TopBar extends StatelessWidget {
                     title,
                     textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                 ),
               ],
@@ -804,7 +866,8 @@ class _TypePill extends StatelessWidget {
             ),
             const SizedBox(width: 9),
             Text(name,
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w700, fontSize: 12.5)),
           ],
         ),
       ),
@@ -842,7 +905,8 @@ class _FocusTypeChip extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(name,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+              style:
+                  const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
         ],
       ),
     );
@@ -904,7 +968,8 @@ class _MiniStat extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  const _MiniStat({required this.icon, required this.label, required this.value});
+  const _MiniStat(
+      {required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -930,14 +995,16 @@ class _MiniStat extends StatelessWidget {
                 Icon(icon, size: 11, color: context.colors.inkSoft),
                 const SizedBox(width: 3),
                 Text(label,
-                    style: TextStyle(fontSize: 10, color: context.colors.inkSoft)),
+                    style:
+                        TextStyle(fontSize: 10, color: context.colors.inkSoft)),
               ],
             ),
             const SizedBox(height: 4),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(value,
-                  style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold)),
+                  style: const TextStyle(
+                      fontSize: 15.5, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -1011,7 +1078,8 @@ class _Stat extends StatelessWidget {
               style: TextStyle(fontSize: 10.5, color: context.colors.inkSoft)),
           const SizedBox(height: 4),
           Text(value,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -1025,4 +1093,52 @@ class _StatDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(width: 1, height: 30, color: context.colors.line);
   }
+}
+
+class _CountdownDialog extends StatefulWidget {
+  final int seconds;
+
+  const _CountdownDialog({required this.seconds});
+
+  @override
+  State<_CountdownDialog> createState() => _CountdownDialogState();
+}
+
+class _CountdownDialogState extends State<_CountdownDialog> {
+  late int _remaining = widget.seconds;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_remaining <= 1) {
+        timer.cancel();
+        if (mounted) Navigator.pop(context, true);
+      } else {
+        setState(() => _remaining--);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Bersiap'),
+        content: Text(
+          'Aktivitas dimulai dalam $_remaining detik',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+        ],
+      );
 }
