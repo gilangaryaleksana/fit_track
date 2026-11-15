@@ -175,6 +175,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ? 'Sinkronisasi selesai.'
             : 'Sinkronisasi selesai. ${pending.length} item masih menunggu.',
       );
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _expireSession();
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _syncing = false;
+        _error = 'Sinkronisasi gagal: ${error.message}';
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -182,6 +192,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _error = 'Sinkronisasi gagal: $error';
       });
     }
+  }
+
+  Future<void> _expireSession() async {
+    await ApiClient.instance.clearToken();
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove(kLocalUserIdKey);
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
+      (route) => false,
+    );
   }
 
   Future<void> _exportCsv() async {

@@ -17,7 +17,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'health_tracker.db');
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -35,6 +35,18 @@ class DatabaseHelper {
     }
     if (oldVersion < 5) {
       await _addAvatarPathColumn(db);
+    }
+    if (oldVersion < 6) {
+      await _addProfileSyncPendingColumn(db);
+    }
+  }
+
+  Future<void> _addProfileSyncPendingColumn(Database db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(users)');
+    if (!columns.any((column) => column['name'] == 'profile_sync_pending')) {
+      await db.execute(
+        'ALTER TABLE users ADD COLUMN profile_sync_pending INTEGER NOT NULL DEFAULT 0',
+      );
     }
   }
 
@@ -93,7 +105,8 @@ class DatabaseHelper {
         birth_date TEXT,
         gender TEXT,
         avatar_initials TEXT,
-        avatar_path TEXT
+        avatar_path TEXT,
+        profile_sync_pending INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
@@ -182,6 +195,83 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [user.id],
     );
+  }
+
+  Future<void> setProfileSyncPending(int userId, bool pending) async {
+    final db = await database;
+    await db.update(
+      'users',
+      {'profile_sync_pending': pending ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  Future<bool> isProfileSyncPending(int userId) async {
+    final db = await database;
+    final result = await db.query(
+      'users',
+      columns: ['profile_sync_pending'],
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+    return result.isNotEmpty && result.first['profile_sync_pending'] == 1;
+  }
+
+  Future<void> mergeServerProfile(
+    int userId,
+    Map<String, dynamic> profile,
+  ) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'users',
+        where: 'id = ?',
+        whereArgs: [userId],
+      );
+      if (rows.isEmpty || rows.first['profile_sync_pending'] == 1) return;
+
+      final local = rows.first;
+      final updates = <String, Object?>{};
+      final serverName = profile['name'] as String?;
+      if ((local['name'] as String).trim().isEmpty &&
+          serverName != null &&
+          serverName.trim().isNotEmpty) {
+        updates['name'] = serverName;
+      }
+
+      final height = num.tryParse(profile['height_cm'].toString());
+      if ((local['height_cm'] as num) == 0 && height != null) {
+        updates['height_cm'] = height;
+      }
+      final weight = num.tryParse(profile['weight_kg'].toString());
+      if ((local['weight_kg'] as num) == 0 && weight != null) {
+        updates['weight_kg'] = weight;
+      }
+
+      final serverBirthDate = profile['birth_date'] as String?;
+      final birthDate = serverBirthDate == null || serverBirthDate.length < 10
+          ? null
+          : serverBirthDate.substring(0, 10);
+      if ((local['birth_date'] as String?)?.isEmpty ?? true) {
+        if (birthDate != null) updates['birth_date'] = birthDate;
+      }
+
+      final serverGender = switch (profile['gender']) {
+        'male' => 'Laki-laki',
+        'female' => 'Perempuan',
+        'other' => 'Lainnya',
+        final String value => value,
+        _ => null,
+      };
+      if ((local['gender'] as String?)?.isEmpty ?? true) {
+        if (serverGender != null) updates['gender'] = serverGender;
+      }
+
+      if (updates.isNotEmpty) {
+        await txn.update('users', updates, where: 'id = ?', whereArgs: [userId]);
+      }
+    });
   }
 
   Future<AppUser?> getUserByEmail(String email) async {

@@ -112,6 +112,8 @@ class ProfileSettingsSection extends StatelessWidget {
   final ValueChanged<String?> onGenderChanged;
   final VoidCallback onSave;
   final bool saving;
+  final Map<String, String> fieldErrors;
+  final ValueChanged<String>? onFieldChanged;
 
   const ProfileSettingsSection({
     super.key,
@@ -126,6 +128,8 @@ class ProfileSettingsSection extends StatelessWidget {
     required this.onGenderChanged,
     required this.onSave,
     required this.saving,
+    this.fieldErrors = const {},
+    this.onFieldChanged,
   });
 
   @override
@@ -136,7 +140,11 @@ class ProfileSettingsSection extends StatelessWidget {
           TextField(
             controller: nameController,
             textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Nama'),
+            onChanged: (_) => onFieldChanged?.call('name'),
+            decoration: InputDecoration(
+              labelText: 'Nama',
+              errorText: fieldErrors['name'],
+            ),
           ),
           Padding(
             padding: const EdgeInsets.only(top: 12),
@@ -155,20 +163,26 @@ class ProfileSettingsSection extends StatelessWidget {
               Expanded(
                 child: TextField(
                   controller: heightController,
+                  onChanged: (_) => onFieldChanged?.call('height_cm'),
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Tinggi (cm)'),
+                  decoration: InputDecoration(
+                    labelText: 'Tinggi (cm)',
+                    errorText: fieldErrors['height_cm'],
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: TextField(
                   controller: weightController,
+                  onChanged: (_) => onFieldChanged?.call('weight_kg'),
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
                     labelText:
                         'Berat (${weightUnit == WeightUnit.kilogram ? 'kg' : 'lb'})',
+                    errorText: fieldErrors['weight_kg'],
                   ),
                 ),
               ),
@@ -177,13 +191,21 @@ class ProfileSettingsSection extends StatelessWidget {
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Tanggal lahir'),
-            subtitle: Text(birthDate ?? 'Belum diatur'),
+            subtitle: Text(
+              fieldErrors['birth_date'] ?? birthDate ?? 'Belum diatur',
+              style: fieldErrors.containsKey('birth_date')
+                  ? TextStyle(color: Theme.of(context).colorScheme.error)
+                  : null,
+            ),
             trailing: const Icon(Icons.calendar_month_outlined),
             onTap: onPickBirthDate,
           ),
           DropdownButtonFormField<String>(
             initialValue: gender,
-            decoration: const InputDecoration(labelText: 'Jenis kelamin'),
+            decoration: InputDecoration(
+              labelText: 'Jenis kelamin',
+              errorText: fieldErrors['gender'],
+            ),
             items: const [
               DropdownMenuItem(value: 'Perempuan', child: Text('Perempuan')),
               DropdownMenuItem(value: 'Laki-laki', child: Text('Laki-laki')),

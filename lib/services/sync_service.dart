@@ -67,7 +67,42 @@ class SyncService {
           syncedAny;
     }
 
+    try {
+      await syncPendingProfile(userId);
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) rethrow;
+    } catch (_) {
+      // Keep profile edits local until a later sync can reach the server.
+    }
+
     return syncedAny;
+  }
+
+  Future<bool> syncPendingProfile(int userId) async {
+    if (!await ApiClient.instance.isLoggedIn) return false;
+    if (!await _syncAllowed()) return false;
+    if (!await DatabaseHelper.instance.isProfileSyncPending(userId)) {
+      return false;
+    }
+
+    final user = await DatabaseHelper.instance.getUser(userId);
+    if (user == null) return false;
+
+    await ApiClient.instance.updateProfile(
+      name: user.name,
+      heightCm: user.heightCm,
+      weightKg: user.weightKg,
+      birthDate: user.birthDate,
+      gender: switch (user.gender) {
+        'Laki-laki' => 'male',
+        'Perempuan' => 'female',
+        'Lainnya' || 'Tidak ingin menyebutkan' => 'other',
+        final String value => value,
+        _ => null,
+      },
+    );
+    await DatabaseHelper.instance.setProfileSyncPending(userId, false);
+    return true;
   }
 
   double _totalDistanceMeters(List<RoutePoint> points) {

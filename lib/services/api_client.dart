@@ -71,6 +71,20 @@ class ApiClient {
     );
   }
 
+  Map<String, dynamic> _parseProfile(dynamic value) {
+    final profile = Map<String, dynamic>.from(value as Map);
+    profile.remove('height');
+    profile.remove('weight');
+    profile['height_cm'] = num.tryParse(profile['height_cm'].toString());
+    profile['weight_kg'] = num.tryParse(profile['weight_kg'].toString());
+    final birthDate = profile['birth_date'] as String?;
+    profile['birth_date'] =
+        birthDate == null || birthDate.length < 10
+            ? null
+            : birthDate.substring(0, 10);
+    return profile;
+  }
+
   // ---------- AUTH ----------
 
   Future<Map<String, dynamic>> register({
@@ -122,7 +136,57 @@ class ApiClient {
 
   Future<Map<String, dynamic>> me() async {
     final res = await http.get(Uri.parse('$baseUrl/me'), headers: await _authHeaders());
-    return _handle(res);
+    return _parseProfile(_handle(res));
+  }
+
+  Future<Map<String, dynamic>> updateProfile({
+    String? name,
+    double? heightCm,
+    double? weightKg,
+    String? birthDate,
+    String? gender,
+  }) async {
+    final body = <String, dynamic>{
+      if (name != null) 'name': name,
+      if (heightCm != null) 'height_cm': heightCm,
+      if (weightKg != null) 'weight_kg': weightKg,
+      if (birthDate != null) 'birth_date': birthDate,
+      if (gender != null) 'gender': gender,
+    };
+    final res = await http.put(
+      Uri.parse('$baseUrl/profile'),
+      headers: await _authHeaders(),
+      body: jsonEncode(body),
+    );
+    return _parseProfile(_handle(res));
+  }
+
+  Future<Map<String, dynamic>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String newPasswordConfirmation,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/change-password'),
+      headers: await _authHeaders(),
+      body: jsonEncode({
+        'current_password': currentPassword,
+        'new_password': newPassword,
+        'new_password_confirmation': newPasswordConfirmation,
+      }),
+    );
+    return Map<String, dynamic>.from(_handle(res) as Map);
+  }
+
+  Future<Map<String, dynamic>> deleteAccount({
+    required String password,
+  }) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/account'),
+      headers: await _authHeaders(),
+      body: jsonEncode({'password': password}),
+    );
+    return Map<String, dynamic>.from(_handle(res) as Map);
   }
 
   // ---------- GENERIC AUTHENTICATED REQUESTS ----------
@@ -151,8 +215,12 @@ class ApiClient {
     return _handle(res);
   }
 
-  Future<dynamic> delete(String path) async {
-    final res = await http.delete(Uri.parse('$baseUrl/$path'), headers: await _authHeaders());
+  Future<dynamic> delete(String path, {Map<String, dynamic>? body}) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/$path'),
+      headers: await _authHeaders(),
+      body: body == null ? null : jsonEncode(body),
+    );
     return _handle(res);
   }
 }

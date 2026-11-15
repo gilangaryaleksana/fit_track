@@ -5,9 +5,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../db/database_helper.dart';
 import '../../models/models.dart';
+import '../../services/api_client.dart';
 import '../../services/settings_service.dart';
+import '../../services/sync_service.dart';
+import '../auth_screen.dart';
 import '../settings/settings_screen.dart';
 import '../settings/settings_sections.dart';
 
@@ -44,6 +48,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _saving = false;
   bool _updatingProfile = false;
   String? _error;
+  Map<String, String> _profileFieldErrors = {};
   late WeightUnit _weightUnit;
 
   @override
@@ -52,6 +57,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _weightUnit = _settings.weightUnit;
     _settings.addListener(_settingsChanged);
     _nameController.addListener(_profileChanged);
+    _heightController.addListener(_heightChanged);
+    _weightController.addListener(_weightChanged);
     _loadProfile();
   }
 
@@ -59,6 +66,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void dispose() {
     _settings.removeListener(_settingsChanged);
     _nameController.removeListener(_profileChanged);
+    _heightController.removeListener(_heightChanged);
+    _weightController.removeListener(_weightChanged);
     _nameController.dispose();
     _initialsController.dispose();
     _heightController.dispose();
@@ -67,7 +76,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _profileChanged() {
-    if (mounted && !_updatingProfile) setState(() {});
+    if (mounted && !_updatingProfile) {
+      setState(() {
+        _profileFieldErrors.remove('name');
+      });
+    }
+  }
+
+  void _heightChanged() => _clearProfileFieldError('height_cm');
+
+  void _weightChanged() => _clearProfileFieldError('weight_kg');
+
+  void _clearProfileFieldError(String field) {
+    if (!mounted ||
+        _updatingProfile ||
+        !_profileFieldErrors.containsKey(field)) {
+      return;
+    }
+    setState(() => _profileFieldErrors.remove(field));
   }
 
   void _settingsChanged() {
@@ -237,6 +263,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {
       _saving = true;
       _error = null;
+      _profileFieldErrors = {};
     });
     try {
       final updated = AppUser(
@@ -253,15 +280,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
         avatarPath: _avatarPath,
       );
       await _database.updateUser(updated);
+      await _database.setProfileSyncPending(widget.userId, true);
       if (existing.avatarPath != null &&
           existing.avatarPath != updated.avatarPath) {
         final oldAvatar = File(existing.avatarPath!);
         if (await oldAvatar.exists()) await oldAvatar.delete();
       }
+
+      ApiException? syncError;
+      try {
+        await SyncService.instance.syncPendingProfile(widget.userId);
+      } on ApiException catch (error) {
+        if (error.statusCode == 401) {
+          await _expireSession();
+          return;
+        }
+        syncError = error;
+      } catch (error) {
+        syncError = ApiException(0, error.toString());
+      }
+
       if (!mounted) return;
       setState(() {
         _user = updated;
         _saving = false;
+        if (syncError != null) {
+          if (syncError.statusCode == 422) {
+            _applyProfileApiError(syncError);
+          } else {
+            _error = syncError.message;
+          }
+        }
       });
       _showMessage('Profil berhasil disimpan.');
     } catch (error) {
@@ -271,6 +320,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _error = 'Profil gagal disimpan: $error';
       });
     }
+  }
+
+  void _applyProfileApiError(ApiException error) {
+    const fields = {
+      'name',
+      'height_cm',
+      'weight_kg',
+      'birth_date',
+      'gender',
+    };
+    final mapped = <String, String>{};
+    for (final field in fields) {
+      final message = _firstApiFieldError(error.errors?[field]);
+      if (message != null) mapped[field] = message;
+    }
+    _profileFieldErrors = mapped;
+    _error = mapped.isEmpty ? error.message : null;
+  }
+
+  String? _firstApiFieldError(dynamic value) {
+    if (value is List && value.isNotEmpty) return value.first.toString();
+    if (value is String && value.isNotEmpty) return value;
+    return null;
   }
 
   Future<void> _pickAvatar() async {
@@ -310,7 +382,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       confirmText: 'Pilih',
     );
     if (date != null) {
-      setState(() => _birthDate = DateFormat('yyyy-MM-dd').format(date));
+      setState(() {
+        _birthDate = DateFormat('yyyy-MM-dd').format(date);
+        _profileFieldErrors.remove('birth_date');
+      });
     }
   }
 
@@ -324,68 +399,275 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _changePassword() async {
-    // TODO: Connect this action when the backend exposes a password-change endpoint.
-    await _showPlaceholder(
-      'Perubahan kata sandi belum tersedia karena layanan backend belum mendukungnya.',
+    final currentPasswordController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    final confirmationController = TextEditingController();
+    var loading = false;
+    var fieldErrors = <String, String>{};
+    String? errorMessage;
+
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Ubah kata sandi'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: currentPasswordController,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'Kata sandi saat ini',
+                    errorText: fieldErrors['current_password'],
+                  ),
+                ),
+                TextField(
+                  controller: newPasswordController,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'Kata sandi baru',
+                    errorText: fieldErrors['new_password'],
+                  ),
+                ),
+                TextField(
+                  controller: confirmationController,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'Konfirmasi kata sandi baru',
+                    errorText: fieldErrors['new_password_confirmation'],
+                  ),
+                ),
+                if (errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        errorMessage!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed:
+                  loading ? null : () => Navigator.pop(dialogContext, false),
+              child: const Text('Batal'),
+            ),
+            FilledButton(
+              onPressed: loading
+                  ? null
+                  : () async {
+                      setDialogState(() {
+                        loading = true;
+                        fieldErrors = {};
+                        errorMessage = null;
+                      });
+                      try {
+                        await ApiClient.instance.changePassword(
+                          currentPassword: currentPasswordController.text,
+                          newPassword: newPasswordController.text,
+                          newPasswordConfirmation: confirmationController.text,
+                        );
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext, true);
+                        }
+                      } on ApiException catch (error) {
+                        if (error.statusCode == 401) {
+                          await _expireSession();
+                          return;
+                        }
+                        final mapped = <String, String>{};
+                        for (final field in [
+                          'current_password',
+                          'new_password',
+                          'new_password_confirmation',
+                        ]) {
+                          final message =
+                              _firstApiFieldError(error.errors?[field]);
+                          if (message != null) {
+                            mapped[field == 'new_password_confirmation'
+                                ? 'new_password'
+                                : field] = message;
+                          }
+                        }
+                        if (dialogContext.mounted) {
+                          setDialogState(() {
+                            fieldErrors = mapped;
+                            errorMessage =
+                                mapped.isEmpty ? error.message : null;
+                          });
+                        }
+                      } catch (error) {
+                        if (dialogContext.mounted) {
+                          setDialogState(() => errorMessage = error.toString());
+                        }
+                      } finally {
+                        if (dialogContext.mounted) {
+                          setDialogState(() => loading = false);
+                        }
+                      }
+                    },
+              child: loading
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Simpan'),
+            ),
+          ],
+        ),
+      ),
     );
+    currentPasswordController.dispose();
+    newPasswordController.dispose();
+    confirmationController.dispose();
+    if (changed == true && mounted) {
+      _showMessage('Kata sandi berhasil diubah.');
+    }
   }
 
   Future<void> _deleteAccount() async {
-    final confirmed = await _confirm(
-      title: 'Hapus akun?',
-      message:
-          'Penghapusan akun belum tersedia. Tidak ada data yang akan dihapus.',
-      confirmLabel: 'Lanjutkan',
-      destructive: true,
-    );
-    if (!confirmed) return;
-    // TODO: Use the backend account-deletion endpoint once it is available.
-    await _showPlaceholder('Layanan penghapusan akun belum tersedia.');
-  }
-
-  Future<bool> _confirm({
-    required String title,
-    required String message,
-    required String confirmLabel,
-    bool destructive = false,
-  }) async =>
-      await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(title),
-          content: Text(message),
+    final passwordController = TextEditingController();
+    var loading = false;
+    String? passwordError;
+    String? errorMessage;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Hapus akun?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Masukkan kata sandi untuk menghapus akun.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Kata sandi',
+                  errorText: passwordError,
+                ),
+              ),
+              if (errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    errorMessage!,
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ),
+            ],
+          ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed:
+                  loading ? null : () => Navigator.pop(dialogContext, false),
               child: const Text('Batal'),
             ),
             TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(
-                confirmLabel,
-                style: destructive
-                    ? TextStyle(color: Theme.of(context).colorScheme.error)
-                    : null,
-              ),
+              onPressed: loading
+                  ? null
+                  : () async {
+                      setDialogState(() {
+                        loading = true;
+                        passwordError = null;
+                        errorMessage = null;
+                      });
+                      try {
+                        await ApiClient.instance.deleteAccount(
+                          password: passwordController.text,
+                        );
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext, true);
+                        }
+                      } on ApiException catch (error) {
+                        if (error.statusCode == 401) {
+                          await _expireSession();
+                          return;
+                        }
+                        if (dialogContext.mounted) {
+                          setDialogState(() {
+                            passwordError =
+                                _firstApiFieldError(error.errors?['password']);
+                            errorMessage =
+                                passwordError == null ? error.message : null;
+                          });
+                        }
+                      } catch (error) {
+                        if (dialogContext.mounted) {
+                          setDialogState(() => errorMessage = error.toString());
+                        }
+                      } finally {
+                        if (dialogContext.mounted) {
+                          setDialogState(() => loading = false);
+                        }
+                      }
+                    },
+              child: loading
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(
+                      'Hapus akun',
+                      style:
+                          TextStyle(color: Theme.of(context).colorScheme.error),
+                    ),
             ),
           ],
         ),
-      ) ??
-      false;
+      ),
+    );
+    passwordController.dispose();
+    if (confirmed != true) return;
 
-  Future<void> _showPlaceholder(String message) => showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Belum tersedia'),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Tutup'),
-            ),
-          ],
-        ),
+    try {
+      final user = await _database.getUser(widget.userId);
+      final avatarPath = user?.avatarPath;
+      await _database.deleteUserData(widget.userId);
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.remove('local_user_id');
+      await ApiClient.instance.clearToken();
+      await _settings.clearSyncMetadata();
+      if (avatarPath != null) {
+        final avatarFile = File(avatarPath);
+        if (await avatarFile.exists()) await avatarFile.delete();
+      }
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AuthScreen()),
+        (route) => false,
       );
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage(
+          'Akun berhasil dihapus, tetapi data lokal gagal dibersihkan: $error');
+    }
+  }
+
+  Future<void> _expireSession() async {
+    await ApiClient.instance.clearToken();
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove('local_user_id');
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
+      (route) => false,
+    );
+  }
 
   Future<void> _logout() => widget.onLogout();
 
@@ -443,10 +725,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           birthDate: _birthDate,
                           gender: _gender,
                           onPickBirthDate: _pickBirthDate,
-                          onGenderChanged: (value) =>
-                              setState(() => _gender = value),
+                          onGenderChanged: (value) => setState(() {
+                            _gender = value;
+                            _profileFieldErrors.remove('gender');
+                          }),
                           onSave: _saveProfile,
                           saving: _saving,
+                          fieldErrors: _profileFieldErrors,
+                          onFieldChanged: _clearProfileFieldError,
                         ),
                         SettingsSection(
                           title: 'Ringkasan',

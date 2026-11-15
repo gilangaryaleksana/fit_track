@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../db/database_helper.dart';
 import '../models/models.dart';
 import '../utils/activity_style.dart';
+import '../services/api_client.dart';
 import '../services/sync_service.dart';
+import 'auth_screen.dart';
 import 'activity_detail_screen.dart';
 import 'start_activity_flow.dart';
 import '../theme/app_colors.dart';
@@ -76,9 +79,24 @@ class HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> loadData() async {
     await _loadLocalData();
-    final syncedAny =
-        await SyncService.instance.syncPendingActivities(widget.userId);
-    if (syncedAny) await _loadLocalData();
+    try {
+      final syncedAny =
+          await SyncService.instance.syncPendingActivities(widget.userId);
+      if (syncedAny) await _loadLocalData();
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) await _expireSession();
+    }
+  }
+
+  Future<void> _expireSession() async {
+    await ApiClient.instance.clearToken();
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove('local_user_id');
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
+      (route) => false,
+    );
   }
 
   Future<void> _loadLocalData() async {

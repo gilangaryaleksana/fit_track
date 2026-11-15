@@ -20,6 +20,9 @@ class PullSyncService {
       if (!loggedIn) return false;
       if (!await SyncService.instance.canSyncNow) return false;
 
+      final serverProfile = await ApiClient.instance.me();
+      await _db.mergeServerProfile(localUserId, serverProfile);
+
       final localTypes = await _db.getActivityTypes();
       final typeIdByName = {
         for (final t in localTypes) t.name.toLowerCase(): t.id!,
