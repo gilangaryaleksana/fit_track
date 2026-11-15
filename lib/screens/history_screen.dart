@@ -11,10 +11,28 @@ import 'activity_detail_screen.dart';
 import 'start_activity_flow.dart';
 import '../theme/app_colors.dart';
 
-const _weekdays = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+const _weekdays = [
+  'Senin',
+  'Selasa',
+  'Rabu',
+  'Kamis',
+  'Jumat',
+  'Sabtu',
+  'Minggu'
+];
 const _months = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-  'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'Mei',
+  'Jun',
+  'Jul',
+  'Agu',
+  'Sep',
+  'Okt',
+  'Nov',
+  'Des',
 ];
 
 /// 3200 -> "3.200" (Indonesian thousands separator, no locale data needed).
@@ -37,7 +55,8 @@ String _dayLabel(DateTime day) {
   final today = DateTime(now.year, now.month, now.day);
   final daysAgo = today.difference(day).inDays;
 
-  final base = '${_weekdays[day.weekday - 1]}, ${day.day} ${_months[day.month - 1]}'
+  final base =
+      '${_weekdays[day.weekday - 1]}, ${day.day} ${_months[day.month - 1]}'
       '${day.year != now.year ? ' ${day.year}' : ''}';
 
   if (daysAgo == 0) return 'Hari ini \u00b7 $base';
@@ -179,8 +198,10 @@ class HistoryScreenState extends State<HistoryScreen> {
 
     final cutoff = DateTime.now().subtract(const Duration(days: 7));
     final recent = visible.where((a) => a.date.isAfter(cutoff)).toList();
-    final recentMinutes = recent.fold<int>(0, (sum, a) => sum + a.durationMinutes);
-    final recentKcal = recent.fold<double>(0, (sum, a) => sum + a.caloriesBurned);
+    final recentMinutes =
+        recent.fold<int>(0, (sum, a) => sum + a.durationMinutes);
+    final recentKcal =
+        recent.fold<double>(0, (sum, a) => sum + a.caloriesBurned);
 
     final rows = _buildRows(visible);
 
@@ -284,7 +305,6 @@ class _SummaryCard extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      constraints: const BoxConstraints(minHeight: 210),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -303,7 +323,6 @@ class _SummaryCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
@@ -357,7 +376,8 @@ class _SummaryStat extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 3),
-            Text(label, style: const TextStyle(fontSize: 10.5, color: Colors.white70)),
+            Text(label,
+                style: const TextStyle(fontSize: 10.5, color: Colors.white70)),
           ],
         ),
       ),
@@ -447,7 +467,9 @@ class _FilterChip extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 14, color: selected ? context.colors.onInk : iconColor),
+                Icon(icon,
+                    size: 14,
+                    color: selected ? context.colors.onInk : iconColor),
                 const SizedBox(width: 5),
               ],
               Text(
@@ -455,7 +477,8 @@ class _FilterChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
-                  color: selected ? context.colors.onInk : context.colors.inkSoft,
+                  color:
+                      selected ? context.colors.onInk : context.colors.inkSoft,
                 ),
               ),
             ],
@@ -482,7 +505,8 @@ class _DayHeaderRow extends StatelessWidget {
           Flexible(
             child: Text(
               _dayLabel(header.day),
-              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+              style:
+                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(width: 8),
@@ -537,7 +561,8 @@ class _HistoryItem extends StatelessWidget {
             child: InkWell(
               onTap: onTap,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
                 child: Row(
                   children: [
                     CircleAvatar(
@@ -632,7 +657,8 @@ class _EmptyHistory extends StatelessWidget {
                   ],
                 ),
               ),
-              child: const Icon(Icons.history, size: 40, color: Color(0xFF1B9AAA)),
+              child:
+                  const Icon(Icons.history, size: 40, color: Color(0xFF1B9AAA)),
             ),
             const SizedBox(height: 18),
             const Text(
@@ -643,14 +669,16 @@ class _EmptyHistory extends StatelessWidget {
             Text(
               'Aktivitas yang kamu simpan bakal muncul di sini, lengkap dengan ringkasan mingguannya.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12.5, height: 1.55, color: context.colors.inkSoft),
+              style: TextStyle(
+                  fontSize: 12.5, height: 1.55, color: context.colors.inkSoft),
             ),
             const SizedBox(height: 18),
             FilledButton(
               onPressed: onStart,
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF2EC4B6),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
               ),
               child: const Text('Mulai Aktivitas'),
             ),
